@@ -1,0 +1,111 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum DocumentStatus {
+  ACTIVE
+  ARCHIVED
+  DELETED
+}
+
+enum ProcessingStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum SubscriptionTier {
+  FREE
+  PRO
+  BUSINESS
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  displayName  String?
+  role         UserRole @default(USER)
+
+  documents     Document[]
+  sessions      Session[]
+  subscription  Subscription?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String
+  expiresAt DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Document {
+  id          String         @id @default(cuid())
+  userId      String
+  title       String
+  status      DocumentStatus @default(ACTIVE)
+  sourceType  String
+  mimeType    String?
+  originalUrl String?
+  pdfUrl      String?
+  searchableText String?
+
+  pages DocumentPage[]
+  user  User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}
+
+model DocumentPage {
+  id             String           @id @default(cuid())
+  documentId     String
+  pageNumber     Int
+  originalImageUrl String?
+  enhancedImageUrl String?
+  ocrText        String?
+  processingStatus ProcessingStatus @default(PENDING)
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([documentId])
+}
+
+model Subscription {
+  id        String           @id @default(cuid())
+  userId    String           @unique
+  tier      SubscriptionTier @default(FREE)
+  isActive  Boolean          @default(false)
+  expiresAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

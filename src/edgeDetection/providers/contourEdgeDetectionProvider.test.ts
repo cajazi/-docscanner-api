@@ -97,9 +97,11 @@ describe('ContourEdgeDetectionProvider', () => {
     expect(result.metadata).toMatchObject({
       provider: 'contour',
       providerVersion: 'contour-sharp-v1',
-      detectionMode: 'threshold-connected-components',
+      detectionMode: 'quad-candidate',
       fallbackUsed: false,
       contourDetectionImplemented: true,
+      quadDetectionImplemented: true,
+      quadDetectionSucceeded: true,
       perspectiveCorrectionRequested: true,
       perspectiveCorrectionImplemented: false,
       preprocessing: {
@@ -110,7 +112,52 @@ describe('ContourEdgeDetectionProvider', () => {
     });
     expect(result.metadata.contourCount).toBeGreaterThanOrEqual(1);
     expect(result.metadata.confidence).toBe(result.confidence);
+    expect(result.metadata.quadMetrics).toEqual(expect.any(Object));
     expect(result.metadata.threshold).toEqual(expect.any(Number));
+  });
+
+  it('returns skewed quad corners for a skewed document candidate', async () => {
+    const source = await createSkewedDocumentOnDarkBackground();
+    const storage = new InMemoryStorage(source);
+    const provider = new ContourEdgeDetectionProvider(storage);
+
+    const result = await provider.detectAndCorrect(defaultInput);
+
+    expect(result.metadata).toMatchObject({
+      detectionMode: 'quad-candidate',
+      quadDetectionImplemented: true,
+      quadDetectionSucceeded: true,
+      fallbackUsed: false,
+    });
+    expect(result.corners.topLeft.x).toBeLessThan(result.corners.topRight.x);
+    expect(result.corners.topRight.y).toBeLessThan(result.corners.bottomRight.y);
+    expect(result.corners.topRight.y).toBeLessThan(result.corners.topLeft.y);
+    expect(result.corners.bottomLeft.x).toBeLessThan(result.corners.bottomRight.x);
+  });
+
+  it('falls back to rectangular bounds when quad detection rejects the contour', async () => {
+    const source = await createThinDocumentOnDarkBackground();
+    const storage = new InMemoryStorage(source);
+    const provider = new ContourEdgeDetectionProvider(storage);
+
+    const result = await provider.detectAndCorrect({
+      ...defaultInput,
+      params: {
+        perspectiveCorrection: false,
+        outputCroppedImage: true,
+      },
+    });
+
+    expect(result.metadata).toMatchObject({
+      detectionMode: 'threshold-connected-components',
+      fallbackUsed: true,
+      quadDetectionImplemented: true,
+      quadDetectionSucceeded: false,
+      perspectiveCorrectionImplemented: false,
+      rectangularCropImplemented: true,
+    });
+    expect(result.corners.topLeft.y).toBeCloseTo(result.corners.topRight.y, 4);
+    expect(result.corners.bottomLeft.y).toBeCloseTo(result.corners.bottomRight.y, 4);
   });
 
   it('detects contours without writing cropped output when crop output is disabled', async () => {
@@ -141,6 +188,36 @@ async function createDocumentOnDarkBackground() {
     '<svg width="400" height="300" xmlns="http://www.w3.org/2000/svg"><rect x="80" y="50" width="240" height="190" fill="#fbfbfb"/></svg>',
   );
 
+  return sharp({
+    create: {
+      width: 400,
+      height: 300,
+      channels: 3,
+      background: '#252525',
+    },
+  })
+    .composite([{ input: page, left: 0, top: 0 }])
+    .jpeg({ quality: 95 })
+    .toBuffer();
+}
+
+async function createSkewedDocumentOnDarkBackground() {
+  const page = Buffer.from(
+    '<svg width="400" height="300" xmlns="http://www.w3.org/2000/svg"><polygon points="92,54 314,34 332,238 68,224" fill="#fbfbfb"/></svg>',
+  );
+
+  return createCompositeDocument(page);
+}
+
+async function createThinDocumentOnDarkBackground() {
+  const page = Buffer.from(
+    '<svg width="400" height="300" xmlns="http://www.w3.org/2000/svg"><rect x="40" y="120" width="320" height="18" fill="#fbfbfb"/></svg>',
+  );
+
+  return createCompositeDocument(page);
+}
+
+function createCompositeDocument(page: Buffer) {
   return sharp({
     create: {
       width: 400,

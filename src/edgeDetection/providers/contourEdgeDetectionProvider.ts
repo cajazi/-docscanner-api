@@ -1,6 +1,7 @@
 import sharp from 'sharp';
 import type { ObjectStorage } from '../../storage/types';
 import type { DocumentCorners, EdgeDetectionResult } from '../types';
+import { detectQuadCandidate, type QuadDetectionResult } from '../quadCornerDetector';
 import type { EdgeDetectionProvider, EdgeDetectionProviderInput } from './edgeDetectionProvider';
 import { HeuristicEdgeDetectionProvider } from './heuristicEdgeDetectionProvider';
 
@@ -25,6 +26,7 @@ type AnalysisResult = {
   threshold: number;
   analysisWidth: number;
   analysisHeight: number;
+  quadDetection: QuadDetectionResult | null;
 };
 
 export class ContourEdgeDetectionProvider implements EdgeDetectionProvider {
@@ -52,11 +54,14 @@ export class ContourEdgeDetectionProvider implements EdgeDetectionProvider {
         metadata: {
           provider: this.name,
           providerVersion,
-          detectionMode: 'threshold-connected-components',
+          detectionMode: analysis.quadDetection ? 'quad-candidate' : 'threshold-connected-components',
           contourCount: analysis.contourCount,
           confidence: analysis.confidence,
-          fallbackUsed: false,
+          fallbackUsed: !analysis.quadDetection,
           contourDetectionImplemented: true,
+          quadDetectionImplemented: true,
+          quadDetectionSucceeded: Boolean(analysis.quadDetection),
+          quadMetrics: analysis.quadDetection?.metrics,
           perspectiveCorrectionRequested: input.params.perspectiveCorrection,
           perspectiveCorrectionImplemented: false,
           rectangularCropImplemented: Boolean(croppedImageUrl),
@@ -118,6 +123,8 @@ export class ContourEdgeDetectionProvider implements EdgeDetectionProvider {
         confidence: fallbackResult.confidence,
         fallbackUsed: true,
         contourDetectionImplemented: true,
+        quadDetectionImplemented: true,
+        quadDetectionSucceeded: false,
         perspectiveCorrectionRequested: input.params.perspectiveCorrection,
         perspectiveCorrectionImplemented: false,
         fallbackProvider: this.fallbackProvider.name,
@@ -157,19 +164,26 @@ async function analyzeDocumentBounds(source: Buffer): Promise<AnalysisResult> {
     throw new Error('No document contour candidate was found');
   }
 
-  const confidence = calculateConfidence(best, width, height);
+  const quadDetection = detectQuadCandidate({
+    mask: foreground,
+    width,
+    height,
+    components: candidates,
+  });
+  const confidence = quadDetection?.confidence ?? calculateConfidence(best, width, height);
   if (confidence < 0.45) {
     throw new Error('Document contour confidence was below threshold');
   }
 
   return {
-    corners: boundsToCorners(best, width, height),
+    corners: quadDetection?.corners ?? boundsToCorners(best, width, height),
     confidence,
     contourCount: candidates.length,
     bounds: best,
     threshold,
     analysisWidth: width,
     analysisHeight: height,
+    quadDetection,
   };
 }
 

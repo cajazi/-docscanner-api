@@ -81,8 +81,10 @@ export async function engineRoutes(app: FastifyInstance, options: EngineRoutesOp
         supportsPerspectiveCorrection: false,
         supportsCroppedOutput: true,
         contourDetectionImplemented: true,
+        quadDetectionImplemented: true,
+        detectionMode: 'quad-capable-contour-foundation',
         perspectiveCorrectionImplemented: false,
-        notes: 'Contour-based document bounds detection is implemented; perspective correction is future work',
+        notes: 'Quad-capable contour detection is implemented; full CamScanner-style auto-crop and perspective correction remain future work in this branch',
       },
       pdfExport: {
         status: 'foundation',

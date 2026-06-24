@@ -79,6 +79,8 @@ describe('engineRoutes', () => {
         supportsPerspectiveCorrection: false,
         supportsCroppedOutput: true,
         contourDetectionImplemented: true,
+        quadDetectionImplemented: true,
+        detectionMode: 'quad-capable-contour-foundation',
         perspectiveCorrectionImplemented: false,
       },
       pdfExport: {

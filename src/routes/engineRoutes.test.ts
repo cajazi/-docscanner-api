@@ -2,18 +2,28 @@ import { describe, expect, it } from 'vitest';
 import { buildApp } from '../app';
 import { OCRPipelineError, OCRPipelineService } from '../ocr/ocrPipelineService';
 import type { OCRPipelineRepository, OCRProvider } from '../ocr/types';
+import { EnhancementPipelineError, EnhancementService } from '../enhancement/enhancementService';
+import type { EnhancementProvider, EnhancementRepository } from '../enhancement/types';
 
-function createService(overrides: Partial<OCRPipelineService> = {}) {
+function createOCRService(overrides: Partial<OCRPipelineService> = {}) {
   const repository = {} as OCRPipelineRepository;
   const provider = {} as OCRProvider;
 
   return Object.assign(new OCRPipelineService(repository, provider), overrides);
 }
 
+function createEnhancementService(overrides: Partial<EnhancementService> = {}) {
+  const repository = {} as EnhancementRepository;
+  const provider = {} as EnhancementProvider;
+
+  return Object.assign(new EnhancementService(repository, provider), overrides);
+}
+
 describe('engineRoutes', () => {
-  it('reports OCR pipeline capabilities', async () => {
+  it('reports OCR and enhancement pipeline capabilities', async () => {
     const app = await buildApp({
-      ocrPipelineService: createService(),
+      ocrPipelineService: createOCRService(),
+      enhancementService: createEnhancementService(),
     });
 
     const response = await app.inject({
@@ -32,12 +42,21 @@ describe('engineRoutes', () => {
         pageLevelTextStorage: true,
         futureSearchablePdfTextLayer: true,
       },
+      enhancement: {
+        providerAbstraction: true,
+        provider: 'SHARP',
+        jobLifecycle: true,
+        atomicJobClaiming: true,
+        pageLevelEnhancedImageStorage: true,
+        modes: ['document', 'grayscale', 'color'],
+        futureOcrReadyImageConsumption: true,
+      },
     });
   });
 
   it('starts page OCR through the pipeline service', async () => {
     const app = await buildApp({
-      ocrPipelineService: createService({
+      ocrPipelineService: createOCRService({
         async startPageOCR(input) {
           return {
             id: 'ocr_job_1',
@@ -58,6 +77,7 @@ describe('engineRoutes', () => {
           };
         },
       }),
+      enhancementService: createEnhancementService(),
     });
 
     const response = await app.inject({
@@ -85,11 +105,12 @@ describe('engineRoutes', () => {
 
   it('translates OCR pipeline errors into API errors', async () => {
     const app = await buildApp({
-      ocrPipelineService: createService({
+      ocrPipelineService: createOCRService({
         async getJob() {
           throw new OCRPipelineError('OCR_JOB_NOT_FOUND', 'OCR job was not found', 404);
         },
       }),
+      enhancementService: createEnhancementService(),
     });
 
     const response = await app.inject({
@@ -104,6 +125,123 @@ describe('engineRoutes', () => {
       error: {
         code: 'OCR_JOB_NOT_FOUND',
         message: 'OCR job was not found',
+      },
+    });
+  });
+
+  it('starts page enhancement through the enhancement service', async () => {
+    const app = await buildApp({
+      ocrPipelineService: createOCRService(),
+      enhancementService: createEnhancementService({
+        async createJob(input) {
+          return {
+            id: 'enhancement_job_1',
+            pageId: input.pageId,
+            status: 'PENDING',
+            provider: 'SHARP',
+            originalImageUrl: 'C:\\tmp\\scan.jpg',
+            enhancedImageUrl: null,
+            errorMessage: null,
+            metadata: {
+              params: input.params,
+            },
+            createdAt: new Date('2026-06-24T00:00:00.000Z'),
+            updatedAt: new Date('2026-06-24T00:00:00.000Z'),
+          };
+        },
+      }),
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/engine/documents/doc_1/pages/page_1/enhancement-jobs',
+      payload: {
+        params: {
+          mode: 'grayscale',
+          brightness: 1.1,
+          contrast: 1.15,
+          deskew: true,
+          perspectiveCorrection: true,
+        },
+      },
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toMatchObject({
+      job: {
+        id: 'enhancement_job_1',
+        status: 'PENDING',
+        provider: 'SHARP',
+      },
+    });
+  });
+
+  it('gets enhancement job status through the enhancement service', async () => {
+    const app = await buildApp({
+      ocrPipelineService: createOCRService(),
+      enhancementService: createEnhancementService({
+        async getJob(jobId) {
+          return {
+            id: jobId,
+            pageId: 'page_1',
+            status: 'COMPLETED',
+            provider: 'SHARP',
+            originalImageUrl: 'C:\\tmp\\scan.jpg',
+            enhancedImageUrl: 'C:\\tmp\\enhanced.jpg',
+            errorMessage: null,
+            metadata: {
+              result: {
+                outputQuality: 92,
+              },
+            },
+            createdAt: new Date('2026-06-24T00:00:00.000Z'),
+            updatedAt: new Date('2026-06-24T00:00:01.000Z'),
+          };
+        },
+      }),
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/engine/enhancement-jobs/enhancement_job_1',
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      job: {
+        id: 'enhancement_job_1',
+        status: 'COMPLETED',
+        enhancedImageUrl: 'C:\\tmp\\enhanced.jpg',
+      },
+    });
+  });
+
+  it('translates enhancement pipeline errors into API errors', async () => {
+    const app = await buildApp({
+      ocrPipelineService: createOCRService(),
+      enhancementService: createEnhancementService({
+        async getJob() {
+          throw new EnhancementPipelineError('ENHANCEMENT_JOB_NOT_FOUND', 'Enhancement job was not found', 404);
+        },
+      }),
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/engine/enhancement-jobs/missing',
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({
+      error: {
+        code: 'ENHANCEMENT_JOB_NOT_FOUND',
+        message: 'Enhancement job was not found',
       },
     });
   });

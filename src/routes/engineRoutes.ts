@@ -1,15 +1,29 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { OCRPipelineError, type OCRPipelineService } from '../ocr/ocrPipelineService';
+import { EnhancementPipelineError, type EnhancementService } from '../enhancement/enhancementService';
 
 type EngineRoutesOptions = {
   ocrPipelineService: OCRPipelineService;
+  enhancementService: EnhancementService;
 };
 
 const startOCRJobSchema = z.object({
   language: z.string().trim().min(2).max(32).default('eng'),
   sourceImageRole: z.enum(['ORIGINAL', 'ENHANCED', 'CROPPED']).default('ENHANCED'),
   sourceImageUrl: z.string().trim().min(1).optional(),
+});
+
+const createEnhancementJobSchema = z.object({
+  params: z
+    .object({
+      mode: z.enum(['document', 'grayscale', 'color']).default('document'),
+      brightness: z.number().min(0.5).max(1.5).optional(),
+      contrast: z.number().min(0.5).max(1.8).optional(),
+      deskew: z.boolean().optional(),
+      perspectiveCorrection: z.boolean().optional(),
+    })
+    .optional(),
 });
 
 export async function engineRoutes(app: FastifyInstance, options: EngineRoutesOptions) {
@@ -25,6 +39,19 @@ export async function engineRoutes(app: FastifyInstance, options: EngineRoutesOp
         futureSearchablePdfTextLayer: true,
         futureLayoutBlocksLinesWords: true,
         futureEnhancementCropAwareOCR: true,
+      },
+      enhancement: {
+        providerAbstraction: true,
+        provider: 'SHARP',
+        jobLifecycle: true,
+        atomicJobClaiming: true,
+        pageLevelEnhancedImageStorage: true,
+        modes: ['document', 'grayscale', 'color'],
+        outputContentType: 'image/jpeg',
+        outputQuality: 92,
+        futureDeskew: true,
+        futurePerspectiveCorrection: true,
+        futureOcrReadyImageConsumption: true,
       },
     };
   });
@@ -60,8 +87,37 @@ export async function engineRoutes(app: FastifyInstance, options: EngineRoutesOp
     return { job };
   });
 
+  app.post('/engine/documents/:documentId/pages/:pageId/enhancement-jobs', async (request, reply) => {
+    const params = z
+      .object({
+        documentId: z.string().min(1),
+        pageId: z.string().min(1),
+      })
+      .parse(request.params);
+
+    const body = createEnhancementJobSchema.parse(request.body ?? {});
+    const job = await options.enhancementService.createJob({
+      documentId: params.documentId,
+      pageId: params.pageId,
+      params: body.params,
+    });
+
+    return reply.code(201).send({ job });
+  });
+
+  app.get('/engine/enhancement-jobs/:jobId', async (request) => {
+    const params = z
+      .object({
+        jobId: z.string().min(1),
+      })
+      .parse(request.params);
+
+    const job = await options.enhancementService.getJob(params.jobId);
+    return { job };
+  });
+
   app.setErrorHandler((error, _request, reply) => {
-    if (error instanceof OCRPipelineError) {
+    if (error instanceof OCRPipelineError || error instanceof EnhancementPipelineError) {
       return reply.code(error.statusCode).send({
         error: {
           code: error.code,

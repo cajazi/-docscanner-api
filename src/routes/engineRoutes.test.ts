@@ -80,11 +80,15 @@ describe('engineRoutes', () => {
       },
       enhancement: {
         providerAbstraction: true,
-        provider: 'SHARP',
+        provider: 'SHARP_V2',
         jobLifecycle: true,
         atomicJobClaiming: true,
         pageLevelEnhancedImageStorage: true,
-        modes: ['document', 'grayscale', 'color'],
+        v2Implemented: true,
+        modes: ['AUTO', 'COLOR', 'GRAYSCALE', 'BLACK_WHITE', 'MAGIC_COLOR', 'DOCUMENT'],
+        shadowCorrectionFoundation: true,
+        adaptiveThresholdFoundation: true,
+        blurDetectionImplemented: true,
         futureOcrReadyImageConsumption: true,
       },
       edgeDetection: {

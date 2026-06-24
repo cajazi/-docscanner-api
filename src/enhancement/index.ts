@@ -5,6 +5,7 @@ import { PrismaEnhancementRepository } from './enhancementRepository';
 import { createEnhancementProcessor, shouldEnableEnhancementProcessor } from './enhancementProcessor';
 import { EnhancementService } from './enhancementService';
 import { SharpEnhancementProvider } from './providers/sharpEnhancementProvider';
+import { EnhancementV2Provider } from './v2/enhancementV2Pipeline';
 
 export function createDefaultEnhancementPipeline() {
   const prisma = createPrismaClient();
@@ -13,7 +14,7 @@ export function createDefaultEnhancementPipeline() {
     publicBaseUrl: env.ENHANCEMENT_STORAGE_PUBLIC_BASE_URL,
   });
   const repository = new PrismaEnhancementRepository(prisma);
-  const provider = new SharpEnhancementProvider(storage);
+  const provider = env.ENHANCEMENT_PROVIDER === 'sharp' ? new SharpEnhancementProvider(storage) : new EnhancementV2Provider(storage);
   const service = new EnhancementService(repository, provider);
   const processor = createEnhancementProcessor(service, {
     enabled: shouldEnableEnhancementProcessor(env.NODE_ENV, env.ENHANCEMENT_PROCESSOR_ENABLED),

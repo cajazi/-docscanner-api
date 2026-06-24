@@ -13,6 +13,7 @@ const envSchema = z.object({
   ),
   ENHANCEMENT_PROCESSOR_POLL_MS: z.coerce.number().int().positive().default(5000),
   ENHANCEMENT_PROCESSOR_BATCH_SIZE: z.coerce.number().int().positive().max(10).default(3),
+  ENHANCEMENT_PROVIDER: z.enum(['sharp', 'v2']).default('v2'),
   ENHANCEMENT_STORAGE_ROOT: z.string().default('C:\\tmp\\docscanner-api\\enhancements'),
   ENHANCEMENT_STORAGE_PUBLIC_BASE_URL: z.string().optional(),
   EDGE_DETECTION_PROCESSOR_ENABLED: z.preprocess(

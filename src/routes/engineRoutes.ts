@@ -21,7 +21,7 @@ const startOCRJobSchema = z.object({
 const createEnhancementJobSchema = z.object({
   params: z
     .object({
-      mode: z.enum(['document', 'grayscale', 'color']).default('document'),
+      mode: z.enum(['document', 'grayscale', 'color', 'AUTO', 'COLOR', 'GRAYSCALE', 'BLACK_WHITE', 'MAGIC_COLOR', 'DOCUMENT']).default('DOCUMENT'),
       brightness: z.number().min(0.5).max(1.5).optional(),
       contrast: z.number().min(0.5).max(1.8).optional(),
       deskew: z.boolean().optional(),
@@ -65,13 +65,17 @@ export async function engineRoutes(app: FastifyInstance, options: EngineRoutesOp
       },
       enhancement: {
         providerAbstraction: true,
-        provider: 'SHARP',
+        provider: 'SHARP_V2',
         jobLifecycle: true,
         atomicJobClaiming: true,
         pageLevelEnhancedImageStorage: true,
-        modes: ['document', 'grayscale', 'color'],
+        v2Implemented: true,
+        modes: ['AUTO', 'COLOR', 'GRAYSCALE', 'BLACK_WHITE', 'MAGIC_COLOR', 'DOCUMENT'],
         outputContentType: 'image/jpeg',
         outputQuality: 92,
+        shadowCorrectionFoundation: true,
+        adaptiveThresholdFoundation: true,
+        blurDetectionImplemented: true,
         futureDeskew: true,
         futurePerspectiveCorrection: true,
         futureOcrReadyImageConsumption: true,

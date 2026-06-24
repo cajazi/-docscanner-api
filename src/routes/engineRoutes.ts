@@ -3,11 +3,13 @@ import { z } from 'zod';
 import { OCRPipelineError, type OCRPipelineService } from '../ocr/ocrPipelineService';
 import { EnhancementPipelineError, type EnhancementService } from '../enhancement/enhancementService';
 import { EdgeDetectionPipelineError, type EdgeDetectionService } from '../edgeDetection/edgeDetectionService';
+import { PdfExportPipelineError, type PdfExportService } from '../pdfExport/pdfExportService';
 
 type EngineRoutesOptions = {
   ocrPipelineService: OCRPipelineService;
   enhancementService: EnhancementService;
   edgeDetectionService: EdgeDetectionService;
+  pdfExportService: PdfExportService;
 };
 
 const startOCRJobSchema = z.object({
@@ -31,6 +33,16 @@ const createEdgeDetectionJobSchema = z.object({
     .object({
       perspectiveCorrection: z.boolean().optional(),
       outputCroppedImage: z.boolean().optional(),
+    })
+    .optional(),
+});
+
+const createPdfExportJobSchema = z.object({
+  options: z
+    .object({
+      searchable: z.boolean().optional(),
+      pageSize: z.enum(['A4', 'AUTO']).optional(),
+      includeOcrTextLayer: z.boolean().optional(),
     })
     .optional(),
 });
@@ -69,6 +81,13 @@ export async function engineRoutes(app: FastifyInstance, options: EngineRoutesOp
         supportsPerspectiveCorrection: false,
         supportsCroppedOutput: true,
         notes: 'Full CamScanner-style contour detection is future work',
+      },
+      pdfExport: {
+        status: 'foundation',
+        provider: 'pdf-lib',
+        supportsImagePdf: true,
+        supportsSearchablePdf: false,
+        usesScanSourceResolver: true,
       },
     };
   });
@@ -160,11 +179,39 @@ export async function engineRoutes(app: FastifyInstance, options: EngineRoutesOp
     return { job };
   });
 
+  app.post('/engine/documents/:documentId/pdf-export-jobs', async (request, reply) => {
+    const params = z
+      .object({
+        documentId: z.string().min(1),
+      })
+      .parse(request.params);
+
+    const body = createPdfExportJobSchema.parse(request.body ?? {});
+    const job = await options.pdfExportService.createJob({
+      documentId: params.documentId,
+      options: body.options,
+    });
+
+    return reply.code(201).send({ job });
+  });
+
+  app.get('/engine/pdf-export-jobs/:jobId', async (request) => {
+    const params = z
+      .object({
+        jobId: z.string().min(1),
+      })
+      .parse(request.params);
+
+    const job = await options.pdfExportService.getJob(params.jobId);
+    return { job };
+  });
+
   app.setErrorHandler((error, _request, reply) => {
     if (
       error instanceof OCRPipelineError ||
       error instanceof EnhancementPipelineError ||
-      error instanceof EdgeDetectionPipelineError
+      error instanceof EdgeDetectionPipelineError ||
+      error instanceof PdfExportPipelineError
     ) {
       return reply.code(error.statusCode).send({
         error: {

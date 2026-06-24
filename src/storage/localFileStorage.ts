@@ -26,8 +26,8 @@ export class LocalFileStorage implements ObjectStorage {
   }
 
   async write(key: string, data: Buffer, contentType: string): Promise<StoredObject> {
-    if (contentType !== 'image/jpeg') {
-      throw new Error(`Unsupported enhanced image content type: ${contentType}`);
+    if (!['image/jpeg', 'application/pdf'].includes(contentType)) {
+      throw new Error(`Unsupported stored object content type: ${contentType}`);
     }
 
     const normalizedKey = key.replace(/\\/g, '/').replace(/^\/+/, '');

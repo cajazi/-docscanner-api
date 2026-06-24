@@ -7,6 +7,8 @@ import type { EnhancementProvider, EnhancementRepository } from '../enhancement/
 import { EdgeDetectionPipelineError, EdgeDetectionService } from '../edgeDetection/edgeDetectionService';
 import type { EdgeDetectionProvider } from '../edgeDetection/providers/edgeDetectionProvider';
 import type { EdgeDetectionRepository } from '../edgeDetection/types';
+import { PdfExportPipelineError, PdfExportService } from '../pdfExport/pdfExportService';
+import type { PdfExportProvider, PdfExportRepository } from '../pdfExport/types';
 
 function createOCRService(overrides: Partial<OCRPipelineService> = {}) {
   const repository = {} as OCRPipelineRepository;
@@ -29,12 +31,20 @@ function createEdgeDetectionService(overrides: Partial<EdgeDetectionService> = {
   return Object.assign(new EdgeDetectionService(repository, provider), overrides);
 }
 
+function createPdfExportService(overrides: Partial<PdfExportService> = {}) {
+  const repository = {} as PdfExportRepository;
+  const provider = {} as PdfExportProvider;
+
+  return Object.assign(new PdfExportService(repository, provider), overrides);
+}
+
 describe('engineRoutes', () => {
-  it('reports OCR, enhancement, and edge detection pipeline capabilities', async () => {
+  it('reports OCR, enhancement, edge detection, and PDF export pipeline capabilities', async () => {
     const app = await buildApp({
       ocrPipelineService: createOCRService(),
       enhancementService: createEnhancementService(),
       edgeDetectionService: createEdgeDetectionService(),
+      pdfExportService: createPdfExportService(),
     });
 
     const response = await app.inject({
@@ -70,6 +80,13 @@ describe('engineRoutes', () => {
         supportsCroppedOutput: true,
         notes: 'Full CamScanner-style contour detection is future work',
       },
+      pdfExport: {
+        status: 'foundation',
+        provider: 'pdf-lib',
+        supportsImagePdf: true,
+        supportsSearchablePdf: false,
+        usesScanSourceResolver: true,
+      },
     });
   });
 
@@ -98,6 +115,7 @@ describe('engineRoutes', () => {
       }),
       enhancementService: createEnhancementService(),
       edgeDetectionService: createEdgeDetectionService(),
+      pdfExportService: createPdfExportService(),
     });
 
     const response = await app.inject({
@@ -130,6 +148,7 @@ describe('engineRoutes', () => {
       }),
       enhancementService: createEnhancementService(),
       edgeDetectionService: createEdgeDetectionService(),
+      pdfExportService: createPdfExportService(),
     });
 
     const response = await app.inject({
@@ -170,6 +189,7 @@ describe('engineRoutes', () => {
         },
       }),
       edgeDetectionService: createEdgeDetectionService(),
+      pdfExportService: createPdfExportService(),
     });
 
     const response = await app.inject({
@@ -222,6 +242,7 @@ describe('engineRoutes', () => {
         },
       }),
       edgeDetectionService: createEdgeDetectionService(),
+      pdfExportService: createPdfExportService(),
     });
 
     const response = await app.inject({
@@ -250,6 +271,7 @@ describe('engineRoutes', () => {
         },
       }),
       edgeDetectionService: createEdgeDetectionService(),
+      pdfExportService: createPdfExportService(),
     });
 
     const response = await app.inject({
@@ -292,6 +314,7 @@ describe('engineRoutes', () => {
           };
         },
       }),
+      pdfExportService: createPdfExportService(),
     });
 
     const response = await app.inject({
@@ -348,6 +371,7 @@ describe('engineRoutes', () => {
           };
         },
       }),
+      pdfExportService: createPdfExportService(),
     });
 
     const response = await app.inject({
@@ -377,6 +401,7 @@ describe('engineRoutes', () => {
           throw new EdgeDetectionPipelineError('EDGE_DETECTION_JOB_NOT_FOUND', 'Edge detection job was not found', 404);
         },
       }),
+      pdfExportService: createPdfExportService(),
     });
 
     const response = await app.inject({
@@ -391,6 +416,128 @@ describe('engineRoutes', () => {
       error: {
         code: 'EDGE_DETECTION_JOB_NOT_FOUND',
         message: 'Edge detection job was not found',
+      },
+    });
+  });
+
+  it('starts PDF export through the PDF export service', async () => {
+    const app = await buildApp({
+      ocrPipelineService: createOCRService(),
+      enhancementService: createEnhancementService(),
+      edgeDetectionService: createEdgeDetectionService(),
+      pdfExportService: createPdfExportService({
+        async createJob(input) {
+          return {
+            id: 'pdf_export_job_1',
+            documentId: input.documentId,
+            status: 'PENDING',
+            provider: 'pdf-lib',
+            outputPdfUrl: null,
+            pageCount: null,
+            errorMessage: null,
+            metadata: {
+              options: input.options,
+            },
+            createdAt: new Date('2026-06-24T00:00:00.000Z'),
+            updatedAt: new Date('2026-06-24T00:00:00.000Z'),
+          };
+        },
+      }),
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/engine/documents/doc_1/pdf-export-jobs',
+      payload: {
+        options: {
+          searchable: true,
+          pageSize: 'A4',
+          includeOcrTextLayer: true,
+        },
+      },
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toMatchObject({
+      job: {
+        id: 'pdf_export_job_1',
+        status: 'PENDING',
+        provider: 'pdf-lib',
+      },
+    });
+  });
+
+  it('gets PDF export job status through the PDF export service', async () => {
+    const app = await buildApp({
+      ocrPipelineService: createOCRService(),
+      enhancementService: createEnhancementService(),
+      edgeDetectionService: createEdgeDetectionService(),
+      pdfExportService: createPdfExportService({
+        async getJob(jobId) {
+          return {
+            id: jobId,
+            documentId: 'doc_1',
+            status: 'COMPLETED',
+            provider: 'pdf-lib',
+            outputPdfUrl: 'C:\\tmp\\pdf-exports\\doc_1\\pdf_export_job_1.pdf',
+            pageCount: 2,
+            errorMessage: null,
+            metadata: {
+              result: {
+                searchablePdfImplemented: false,
+              },
+            },
+            createdAt: new Date('2026-06-24T00:00:00.000Z'),
+            updatedAt: new Date('2026-06-24T00:00:01.000Z'),
+          };
+        },
+      }),
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/engine/pdf-export-jobs/pdf_export_job_1',
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      job: {
+        id: 'pdf_export_job_1',
+        status: 'COMPLETED',
+        outputPdfUrl: 'C:\\tmp\\pdf-exports\\doc_1\\pdf_export_job_1.pdf',
+        pageCount: 2,
+      },
+    });
+  });
+
+  it('translates PDF export missing-job errors into API errors', async () => {
+    const app = await buildApp({
+      ocrPipelineService: createOCRService(),
+      enhancementService: createEnhancementService(),
+      edgeDetectionService: createEdgeDetectionService(),
+      pdfExportService: createPdfExportService({
+        async getJob() {
+          throw new PdfExportPipelineError('PDF_EXPORT_JOB_NOT_FOUND', 'PDF export job was not found', 404);
+        },
+      }),
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/engine/pdf-export-jobs/missing',
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({
+      error: {
+        code: 'PDF_EXPORT_JOB_NOT_FOUND',
+        message: 'PDF export job was not found',
       },
     });
   });

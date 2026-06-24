@@ -23,6 +23,14 @@ const envSchema = z.object({
   EDGE_DETECTION_BATCH_SIZE: z.coerce.number().int().positive().max(10).default(3),
   EDGE_DETECTION_STORAGE_ROOT: z.string().default('C:\\tmp\\docscanner-api\\edge-detection'),
   EDGE_DETECTION_STORAGE_PUBLIC_BASE_URL: z.string().optional(),
+  PDF_EXPORT_PROCESSOR_ENABLED: z.preprocess(
+    (value) => (typeof value === 'string' ? value.toLowerCase() !== 'false' : value),
+    z.boolean().default(false),
+  ),
+  PDF_EXPORT_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(5000),
+  PDF_EXPORT_BATCH_SIZE: z.coerce.number().int().positive().max(10).default(3),
+  PDF_EXPORT_STORAGE_ROOT: z.string().default('C:\\tmp\\docscanner-api\\pdf-exports'),
+  PDF_EXPORT_STORAGE_PUBLIC_BASE_URL: z.string().optional(),
 });
 
 export const env = envSchema.parse(process.env);

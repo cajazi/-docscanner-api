@@ -46,6 +46,13 @@ enum EdgeDetectionStatus {
   FAILED
 }
 
+enum PdfExportStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
 enum OCRProvider {
   TESSERACT_CLI
 }
@@ -97,12 +104,32 @@ model Document {
 
   pages DocumentPage[]
   ocrJobs OCRJob[]
+  pdfExportJobs PdfExportJob[]
   user  User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([userId])
+  @@index([status])
+}
+
+model PdfExportJob {
+  id           String          @id @default(cuid())
+  documentId   String
+  status       PdfExportStatus @default(PENDING)
+  provider     String          @default("pdf-lib")
+  outputPdfUrl String?
+  pageCount    Int?
+  errorMessage String?
+  metadata     Json?
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([documentId])
   @@index([status])
 }
 

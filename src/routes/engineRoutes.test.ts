@@ -89,13 +89,15 @@ describe('engineRoutes', () => {
       },
       edgeDetection: {
         status: 'real-foundation',
-        provider: 'contour',
+        provider: 'cv-pipeline',
         supportsFourCorners: true,
         supportsPerspectiveCorrection: false,
         supportsCroppedOutput: true,
         contourDetectionImplemented: true,
         quadDetectionImplemented: true,
-        detectionMode: 'quad-capable-contour-foundation',
+        cvPipelineImplemented: true,
+        nativeOpenCvImplemented: false,
+        detectionMode: 'cv-pipeline-foundation',
         perspectiveCorrectionImplemented: false,
       },
       pdfExport: {

@@ -24,7 +24,7 @@ export class EnhancementPipelineError extends Error {
 }
 
 const defaultParams: EnhancementParams = {
-  mode: 'document',
+  mode: 'DOCUMENT',
   brightness: 1.03,
   contrast: 1.08,
   deskew: false,

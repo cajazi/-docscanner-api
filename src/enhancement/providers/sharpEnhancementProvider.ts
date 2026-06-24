@@ -10,14 +10,15 @@ export class SharpEnhancementProvider implements EnhancementProvider {
   async enhance(input: EnhancementProviderInput): Promise<EnhancementProviderResult> {
     const source = await this.storage.read(input.originalImageUrl);
     let pipeline = sharp(source, { failOn: 'none' }).rotate();
+    const mode = input.params.mode.toLowerCase();
 
-    if (input.params.mode === 'document') {
+    if (mode === 'document' || mode === 'auto' || mode === 'magic_color') {
       pipeline = pipeline.normalize().modulate({ brightness: input.params.brightness }).linear(input.params.contrast, 0).sharpen({
         sigma: 1,
         m1: 1,
         m2: 2,
       });
-    } else if (input.params.mode === 'grayscale') {
+    } else if (mode === 'grayscale' || mode === 'black_white') {
       pipeline = pipeline.grayscale().normalize().modulate({ brightness: input.params.brightness }).linear(input.params.contrast, 0).sharpen({
         sigma: 1,
         m1: 1,
@@ -41,8 +42,8 @@ export class SharpEnhancementProvider implements EnhancementProvider {
         transforms: {
           autoRotate: true,
           normalize: true,
-          grayscale: input.params.mode === 'grayscale',
-          sharpen: input.params.mode !== 'color',
+          grayscale: mode === 'grayscale' || mode === 'black_white',
+          sharpen: mode !== 'color',
           brightness: input.params.brightness,
           contrast: input.params.contrast,
         },

@@ -1,5 +1,14 @@
 export type EnhancementStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
-export type EnhancementMode = 'document' | 'grayscale' | 'color';
+export type EnhancementMode =
+  | 'document'
+  | 'grayscale'
+  | 'color'
+  | 'AUTO'
+  | 'COLOR'
+  | 'GRAYSCALE'
+  | 'BLACK_WHITE'
+  | 'MAGIC_COLOR'
+  | 'DOCUMENT';
 
 export type EnhancementParams = {
   mode: EnhancementMode;

@@ -101,6 +101,7 @@ model Document {
   originalUrl String?
   pdfUrl      String?
   searchableText String?
+  searchablePdfMetadata Json?
 
   pages DocumentPage[]
   ocrJobs OCRJob[]

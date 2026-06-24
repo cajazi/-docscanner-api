@@ -144,8 +144,10 @@ function createProvider(overrides: Partial<PdfExportProvider> = {}) {
 }
 
 function createSearchablePdfService() {
-  return new SearchablePdfService({
+  const calls: string[] = [];
+  const service = new SearchablePdfService({
     async findDocumentWithOcrPages(documentId) {
+      calls.push(documentId);
       return {
         id: documentId,
         pages: [
@@ -158,6 +160,8 @@ function createSearchablePdfService() {
       return undefined;
     },
   });
+
+  return { service, calls };
 }
 
 describe('PdfExportService', () => {
@@ -256,8 +260,23 @@ describe('PdfExportService', () => {
 
   it('stores searchable text layer metadata when requested', async () => {
     const repository = new InMemoryPdfExportRepository(documentFixture());
-    const { provider } = createProvider();
-    const service = new PdfExportService(repository, provider, createSearchablePdfService());
+    const { provider, calls } = createProvider({
+      async export(input) {
+        calls.push(input);
+        return {
+          outputPdfUrl: 'C:\\tmp\\pdf-exports\\doc_1\\pdf_export_job_1.pdf',
+          pageCount: input.pages.length,
+          metadata: {
+            searchablePdfImplemented: true,
+            invisibleTextLayerImplemented: true,
+            pagesWithTextLayer: 2,
+            pagesWithoutTextLayer: 0,
+          },
+        };
+      },
+    });
+    const searchablePdf = createSearchablePdfService();
+    const service = new PdfExportService(repository, provider, searchablePdf.service);
     const pending = await service.createJob({
       documentId: 'doc_1',
       options: { searchable: true, includeOcrTextLayer: true },
@@ -265,11 +284,16 @@ describe('PdfExportService', () => {
 
     const completed = await service.processJob(pending.id);
 
+    expect(searchablePdf.calls).toEqual(['doc_1']);
+    expect(calls[0]?.textLayer).toMatchObject({
+      documentId: 'doc_1',
+      searchableText: 'First searchable page\n\nSecond searchable page',
+    });
     expect(completed?.metadata).toMatchObject({
       searchablePdf: {
         requested: true,
         textLayerMetadataImplemented: true,
-        invisibleTextLayerImplemented: false,
+        invisibleTextLayerImplemented: true,
         textLayer: {
           documentId: 'doc_1',
           searchableText: 'First searchable page\n\nSecond searchable page',

@@ -91,7 +91,7 @@ export async function engineRoutes(app: FastifyInstance, options: EngineRoutesOp
       },
       searchablePdf: {
         status: 'foundation',
-        invisibleTextLayerImplemented: false,
+        invisibleTextLayerImplemented: true,
         textLayerMetadataImplemented: true,
       },
     };

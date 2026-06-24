@@ -84,8 +84,8 @@ describe('engineRoutes', () => {
             provider: 'TESSERACT_CLI',
             status: 'COMPLETED',
             language: input.language ?? 'eng',
-            sourceImageUrl: input.sourceImageUrl ?? 'C:\\tmp\\scan.jpg',
-            sourceImageRole: input.sourceImageRole ?? 'ENHANCED',
+            sourceImageUrl: 'C:\\tmp\\scan.jpg',
+            sourceImageRole: 'ENHANCED',
             extractedText: 'Detected text',
             errorCode: null,
             errorMessage: null,
@@ -105,8 +105,6 @@ describe('engineRoutes', () => {
       url: '/engine/documents/doc_1/pages/page_1/ocr-jobs',
       payload: {
         language: 'eng',
-        sourceImageRole: 'ORIGINAL',
-        sourceImageUrl: 'C:\\tmp\\scan.jpg',
       },
     });
 
@@ -118,7 +116,7 @@ describe('engineRoutes', () => {
         id: 'ocr_job_1',
         status: 'COMPLETED',
         extractedText: 'Detected text',
-        sourceImageRole: 'ORIGINAL',
+        sourceImageRole: 'ENHANCED',
       },
     });
   });

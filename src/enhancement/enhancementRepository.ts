@@ -18,6 +18,7 @@ export class PrismaEnhancementRepository implements EnhancementRepository {
         id: true,
         documentId: true,
         originalImageUrl: true,
+        croppedImageUrl: true,
         enhancedImageUrl: true,
       },
     });

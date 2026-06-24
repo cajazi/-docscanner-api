@@ -12,8 +12,6 @@ type EngineRoutesOptions = {
 
 const startOCRJobSchema = z.object({
   language: z.string().trim().min(2).max(32).default('eng'),
-  sourceImageRole: z.enum(['ORIGINAL', 'ENHANCED', 'CROPPED']).default('ENHANCED'),
-  sourceImageUrl: z.string().trim().min(1).optional(),
 });
 
 const createEnhancementJobSchema = z.object({
@@ -88,8 +86,6 @@ export async function engineRoutes(app: FastifyInstance, options: EngineRoutesOp
       documentId: params.documentId,
       pageId: params.pageId,
       language: body.language,
-      sourceImageRole: body.sourceImageRole,
-      sourceImageUrl: body.sourceImageUrl,
     });
 
     return reply.code(201).send({ job });

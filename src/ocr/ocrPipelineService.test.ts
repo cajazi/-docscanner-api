@@ -174,10 +174,10 @@ describe('OCRPipelineService', () => {
     });
 
     expect(repository.completedInput?.sourceImageUrl).toBe('C:\\tmp\\scan.jpg');
-    expect(repository.completedInput?.sourceImageRole).toBe('ENHANCED');
+    expect(repository.completedInput?.sourceImageRole).toBe('ORIGINAL');
   });
 
-  it('uses the cropped image when OCR source role is CROPPED', async () => {
+  it('uses the cropped image first through the scan source resolver', async () => {
     const repository = new InMemoryOCRRepository({
       id: 'page_1',
       documentId: 'doc_1',
@@ -190,7 +190,6 @@ describe('OCRPipelineService', () => {
     await service.startPageOCR({
       documentId: 'doc_1',
       pageId: 'page_1',
-      sourceImageRole: 'CROPPED',
     });
 
     expect(repository.completedInput?.sourceImageUrl).toBe('C:\\tmp\\scan-cropped.jpg');

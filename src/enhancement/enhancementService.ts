@@ -4,6 +4,8 @@ import type {
   EnhancementProvider,
   EnhancementRepository,
 } from './types';
+import { resolvePageImageSource, ScanSourceResolutionError } from '../scanSource/scanSourceResolver';
+import { ScanConsumer } from '../scanSource/types';
 
 export type CreateEnhancementJobInput = {
   documentId: string;
@@ -41,11 +43,11 @@ export class EnhancementService {
       throw new EnhancementPipelineError('PAGE_NOT_FOUND', 'Document page was not found', 404);
     }
 
-    const originalImageUrl = page.originalImageUrl;
-    if (!originalImageUrl) {
+    const source = this.resolveSource(page);
+    if (!source.imageUrl) {
       throw new EnhancementPipelineError(
         'PAGE_IMAGE_MISSING',
-        'Document page does not have an original image for enhancement',
+        'Document page does not have a usable image for enhancement',
         409,
       );
     }
@@ -59,9 +61,10 @@ export class EnhancementService {
     return this.repository.createJob({
       pageId: input.pageId,
       provider: this.provider.name,
-      originalImageUrl,
+      originalImageUrl: source.imageUrl,
       metadata: {
         params,
+        sourceRole: source.role,
         requestedCapabilities: {
           deskew: params.deskew,
           perspectiveCorrection: params.perspectiveCorrection,
@@ -118,6 +121,22 @@ export class EnhancementService {
     }
 
     return job;
+  }
+
+  private resolveSource(page: {
+    originalImageUrl: string | null;
+    croppedImageUrl: string | null;
+    enhancedImageUrl: string | null;
+  }) {
+    try {
+      return resolvePageImageSource(page, ScanConsumer.ENHANCEMENT);
+    } catch (error) {
+      if (error instanceof ScanSourceResolutionError) {
+        throw new EnhancementPipelineError('PAGE_IMAGE_MISSING', error.message, 409);
+      }
+
+      throw error;
+    }
   }
 }
 

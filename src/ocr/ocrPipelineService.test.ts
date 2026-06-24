@@ -140,6 +140,7 @@ describe('OCRPipelineService', () => {
       id: 'page_1',
       documentId: 'doc_1',
       originalImageUrl: 'C:\\tmp\\scan.jpg',
+      croppedImageUrl: null,
       enhancedImageUrl: 'C:\\tmp\\scan-enhanced.jpg',
     });
     const service = new OCRPipelineService(repository, createProvider());
@@ -162,6 +163,7 @@ describe('OCRPipelineService', () => {
       id: 'page_1',
       documentId: 'doc_1',
       originalImageUrl: 'C:\\tmp\\scan.jpg',
+      croppedImageUrl: null,
       enhancedImageUrl: null,
     });
     const service = new OCRPipelineService(repository, createProvider());
@@ -175,11 +177,32 @@ describe('OCRPipelineService', () => {
     expect(repository.completedInput?.sourceImageRole).toBe('ENHANCED');
   });
 
+  it('uses the cropped image when OCR source role is CROPPED', async () => {
+    const repository = new InMemoryOCRRepository({
+      id: 'page_1',
+      documentId: 'doc_1',
+      originalImageUrl: 'C:\\tmp\\scan.jpg',
+      croppedImageUrl: 'C:\\tmp\\scan-cropped.jpg',
+      enhancedImageUrl: 'C:\\tmp\\scan-enhanced.jpg',
+    });
+    const service = new OCRPipelineService(repository, createProvider());
+
+    await service.startPageOCR({
+      documentId: 'doc_1',
+      pageId: 'page_1',
+      sourceImageRole: 'CROPPED',
+    });
+
+    expect(repository.completedInput?.sourceImageUrl).toBe('C:\\tmp\\scan-cropped.jpg');
+    expect(repository.completedInput?.sourceImageRole).toBe('CROPPED');
+  });
+
   it('marks the job failed when the OCR provider fails', async () => {
     const repository = new InMemoryOCRRepository({
       id: 'page_1',
       documentId: 'doc_1',
       originalImageUrl: 'C:\\tmp\\scan.jpg',
+      croppedImageUrl: null,
       enhancedImageUrl: null,
     });
     const service = new OCRPipelineService(
@@ -208,6 +231,7 @@ describe('OCRPipelineService', () => {
       id: 'page_1',
       documentId: 'doc_1',
       originalImageUrl: null,
+      croppedImageUrl: null,
       enhancedImageUrl: null,
     });
     const service = new OCRPipelineService(repository, createProvider());

@@ -4,12 +4,14 @@ import { OCRPipelineError, type OCRPipelineService } from '../ocr/ocrPipelineSer
 import { EnhancementPipelineError, type EnhancementService } from '../enhancement/enhancementService';
 import { EdgeDetectionPipelineError, type EdgeDetectionService } from '../edgeDetection/edgeDetectionService';
 import { PdfExportPipelineError, type PdfExportService } from '../pdfExport/pdfExportService';
+import { ScanPipelineError, toProcessPageResponse, type ScanPipelineService } from '../scanPipeline/scanPipelineService';
 
 type EngineRoutesOptions = {
   ocrPipelineService: OCRPipelineService;
   enhancementService: EnhancementService;
   edgeDetectionService: EdgeDetectionService;
   pdfExportService: PdfExportService;
+  scanPipelineService: ScanPipelineService;
 };
 
 const startOCRJobSchema = z.object({
@@ -97,6 +99,15 @@ export async function engineRoutes(app: FastifyInstance, options: EngineRoutesOp
         status: 'foundation',
         invisibleTextLayerImplemented: true,
         textLayerMetadataImplemented: true,
+      },
+      scanPipeline: {
+        status: 'integrated',
+        automaticSourceSelection: true,
+        quadDetectionIntegrated: true,
+        perspectiveIntegrated: true,
+        enhancementIntegrated: true,
+        ocrIntegrated: true,
+        searchablePdfIntegrated: true,
       },
     };
   });
@@ -188,6 +199,22 @@ export async function engineRoutes(app: FastifyInstance, options: EngineRoutesOp
     return { job };
   });
 
+  app.post('/engine/documents/:documentId/pages/:pageId/process', async (request, reply) => {
+    const params = z
+      .object({
+        documentId: z.string().min(1),
+        pageId: z.string().min(1),
+      })
+      .parse(request.params);
+
+    const result = await options.scanPipelineService.processPage({
+      documentId: params.documentId,
+      pageId: params.pageId,
+    });
+
+    return reply.code(202).send(toProcessPageResponse(result));
+  });
+
   app.post('/engine/documents/:documentId/pdf-export-jobs', async (request, reply) => {
     const params = z
       .object({
@@ -220,7 +247,8 @@ export async function engineRoutes(app: FastifyInstance, options: EngineRoutesOp
       error instanceof OCRPipelineError ||
       error instanceof EnhancementPipelineError ||
       error instanceof EdgeDetectionPipelineError ||
-      error instanceof PdfExportPipelineError
+      error instanceof PdfExportPipelineError ||
+      error instanceof ScanPipelineError
     ) {
       return reply.code(error.statusCode).send({
         error: {

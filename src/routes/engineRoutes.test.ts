@@ -9,6 +9,8 @@ import type { EdgeDetectionProvider } from '../edgeDetection/providers/edgeDetec
 import type { EdgeDetectionRepository } from '../edgeDetection/types';
 import { PdfExportPipelineError, PdfExportService } from '../pdfExport/pdfExportService';
 import type { PdfExportProvider, PdfExportRepository } from '../pdfExport/types';
+import { ScanPipelineService } from '../scanPipeline/scanPipelineService';
+import type { SearchablePdfService } from '../searchablePdf/searchablePdfService';
 
 function createOCRService(overrides: Partial<OCRPipelineService> = {}) {
   const repository = {} as OCRPipelineRepository;
@@ -38,6 +40,18 @@ function createPdfExportService(overrides: Partial<PdfExportService> = {}) {
   return Object.assign(new PdfExportService(repository, provider), overrides);
 }
 
+function createScanPipelineService(overrides: Partial<ScanPipelineService> = {}) {
+  return Object.assign(
+    new ScanPipelineService({
+      edgeDetectionService: createEdgeDetectionService(),
+      enhancementService: createEnhancementService(),
+      ocrPipelineService: createOCRService(),
+      searchablePdfService: {} as SearchablePdfService,
+    }),
+    overrides,
+  );
+}
+
 describe('engineRoutes', () => {
   it('reports OCR, enhancement, edge detection, and PDF export pipeline capabilities', async () => {
     const app = await buildApp({
@@ -45,6 +59,7 @@ describe('engineRoutes', () => {
       enhancementService: createEnhancementService(),
       edgeDetectionService: createEdgeDetectionService(),
       pdfExportService: createPdfExportService(),
+      scanPipelineService: createScanPipelineService(),
     });
 
     const response = await app.inject({
@@ -94,6 +109,15 @@ describe('engineRoutes', () => {
         status: 'foundation',
         invisibleTextLayerImplemented: true,
         textLayerMetadataImplemented: true,
+      },
+      scanPipeline: {
+        status: 'integrated',
+        automaticSourceSelection: true,
+        quadDetectionIntegrated: true,
+        perspectiveIntegrated: true,
+        enhancementIntegrated: true,
+        ocrIntegrated: true,
+        searchablePdfIntegrated: true,
       },
     });
   });
@@ -425,6 +449,51 @@ describe('engineRoutes', () => {
         code: 'EDGE_DETECTION_JOB_NOT_FOUND',
         message: 'Edge detection job was not found',
       },
+    });
+  });
+
+  it('processes a page through the integrated scan pipeline service', async () => {
+    const app = await buildApp({
+      ocrPipelineService: createOCRService(),
+      enhancementService: createEnhancementService(),
+      edgeDetectionService: createEdgeDetectionService(),
+      pdfExportService: createPdfExportService(),
+      scanPipelineService: createScanPipelineService({
+        async processPage(input) {
+          return {
+            pipelineId: 'pipeline_1',
+            documentId: input.documentId,
+            pageId: input.pageId,
+            pipelineVersion: 'scan-pipeline-v1',
+            completedStages: ['QUAD_DETECTION', 'ENHANCEMENT', 'OCR', 'SEARCHABLE_METADATA'],
+            failedStages: [],
+            fallbackStages: ['PERSPECTIVE_CORRECTION'],
+            finalImageRole: 'ENHANCED',
+            processingDurationMs: 12,
+            searchableReady: true,
+            edgeDetectionJob: null,
+            enhancementJob: null,
+            ocrJob: null,
+            searchableTextLayer: null,
+          };
+        },
+      }),
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/engine/documents/doc_1/pages/page_1/process',
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(202);
+    expect(response.json()).toEqual({
+      pipelineId: 'pipeline_1',
+      completedStages: ['QUAD_DETECTION', 'ENHANCEMENT', 'OCR', 'SEARCHABLE_METADATA'],
+      failedStages: [],
+      finalImageRole: 'ENHANCED',
+      searchableReady: true,
     });
   });
 

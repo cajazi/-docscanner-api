@@ -4,6 +4,7 @@ import { LocalFileStorage } from '../storage/localFileStorage';
 import { PrismaEdgeDetectionRepository } from './edgeDetectionRepository';
 import { createEdgeDetectionProcessor, shouldEnableEdgeDetectionProcessor } from './edgeDetectionProcessor';
 import { EdgeDetectionService } from './edgeDetectionService';
+import { CvQuadDetectionProvider } from './cv/cvQuadDetectionProvider';
 import { ContourEdgeDetectionProvider } from './providers/contourEdgeDetectionProvider';
 import { HeuristicEdgeDetectionProvider } from './providers/heuristicEdgeDetectionProvider';
 
@@ -14,10 +15,7 @@ export function createDefaultEdgeDetectionPipeline() {
     publicBaseUrl: env.EDGE_DETECTION_STORAGE_PUBLIC_BASE_URL,
   });
   const repository = new PrismaEdgeDetectionRepository(prisma);
-  const provider =
-    env.EDGE_DETECTION_PROVIDER === 'contour'
-      ? new ContourEdgeDetectionProvider(storage)
-      : new HeuristicEdgeDetectionProvider(storage);
+  const provider = createEdgeDetectionProvider(env.EDGE_DETECTION_PROVIDER, storage);
   const service = new EdgeDetectionService(repository, provider);
   const processor = createEdgeDetectionProcessor(service, {
     enabled: shouldEnableEdgeDetectionProcessor(env.NODE_ENV, env.EDGE_DETECTION_PROCESSOR_ENABLED),
@@ -33,4 +31,16 @@ export function createDefaultEdgeDetectionPipeline() {
       await prisma.$disconnect();
     },
   };
+}
+
+function createEdgeDetectionProvider(providerName: 'heuristic' | 'contour' | 'cv', storage: LocalFileStorage) {
+  if (providerName === 'cv') {
+    return new CvQuadDetectionProvider(storage);
+  }
+
+  if (providerName === 'contour') {
+    return new ContourEdgeDetectionProvider(storage);
+  }
+
+  return new HeuristicEdgeDetectionProvider(storage);
 }

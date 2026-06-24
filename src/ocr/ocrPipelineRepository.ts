@@ -18,6 +18,7 @@ export class PrismaOCRPipelineRepository implements OCRPipelineRepository {
         id: true,
         documentId: true,
         originalImageUrl: true,
+        croppedImageUrl: true,
         enhancedImageUrl: true,
       },
     });

@@ -86,11 +86,15 @@ export class OCRPipelineService {
   }
 
   private pickSourceImage(
-    page: { originalImageUrl: string | null; enhancedImageUrl: string | null },
+    page: { originalImageUrl: string | null; croppedImageUrl: string | null; enhancedImageUrl: string | null },
     sourceImageRole: OCRImageRole,
   ) {
     if (sourceImageRole === 'ORIGINAL') {
       return page.originalImageUrl;
+    }
+
+    if (sourceImageRole === 'CROPPED') {
+      return page.croppedImageUrl ?? page.enhancedImageUrl ?? page.originalImageUrl;
     }
 
     return page.enhancedImageUrl ?? page.originalImageUrl;

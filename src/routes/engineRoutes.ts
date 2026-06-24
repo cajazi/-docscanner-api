@@ -2,10 +2,12 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { OCRPipelineError, type OCRPipelineService } from '../ocr/ocrPipelineService';
 import { EnhancementPipelineError, type EnhancementService } from '../enhancement/enhancementService';
+import { EdgeDetectionPipelineError, type EdgeDetectionService } from '../edgeDetection/edgeDetectionService';
 
 type EngineRoutesOptions = {
   ocrPipelineService: OCRPipelineService;
   enhancementService: EnhancementService;
+  edgeDetectionService: EdgeDetectionService;
 };
 
 const startOCRJobSchema = z.object({
@@ -22,6 +24,15 @@ const createEnhancementJobSchema = z.object({
       contrast: z.number().min(0.5).max(1.8).optional(),
       deskew: z.boolean().optional(),
       perspectiveCorrection: z.boolean().optional(),
+    })
+    .optional(),
+});
+
+const createEdgeDetectionJobSchema = z.object({
+  params: z
+    .object({
+      perspectiveCorrection: z.boolean().optional(),
+      outputCroppedImage: z.boolean().optional(),
     })
     .optional(),
 });
@@ -52,6 +63,14 @@ export async function engineRoutes(app: FastifyInstance, options: EngineRoutesOp
         futureDeskew: true,
         futurePerspectiveCorrection: true,
         futureOcrReadyImageConsumption: true,
+      },
+      edgeDetection: {
+        status: 'foundation',
+        provider: 'heuristic',
+        supportsFourCorners: true,
+        supportsPerspectiveCorrection: false,
+        supportsCroppedOutput: true,
+        notes: 'Full CamScanner-style contour detection is future work',
       },
     };
   });
@@ -116,8 +135,41 @@ export async function engineRoutes(app: FastifyInstance, options: EngineRoutesOp
     return { job };
   });
 
+  app.post('/engine/documents/:documentId/pages/:pageId/edge-detection-jobs', async (request, reply) => {
+    const params = z
+      .object({
+        documentId: z.string().min(1),
+        pageId: z.string().min(1),
+      })
+      .parse(request.params);
+
+    const body = createEdgeDetectionJobSchema.parse(request.body ?? {});
+    const job = await options.edgeDetectionService.createJob({
+      documentId: params.documentId,
+      pageId: params.pageId,
+      params: body.params,
+    });
+
+    return reply.code(201).send({ job });
+  });
+
+  app.get('/engine/edge-detection-jobs/:jobId', async (request) => {
+    const params = z
+      .object({
+        jobId: z.string().min(1),
+      })
+      .parse(request.params);
+
+    const job = await options.edgeDetectionService.getJob(params.jobId);
+    return { job };
+  });
+
   app.setErrorHandler((error, _request, reply) => {
-    if (error instanceof OCRPipelineError || error instanceof EnhancementPipelineError) {
+    if (
+      error instanceof OCRPipelineError ||
+      error instanceof EnhancementPipelineError ||
+      error instanceof EdgeDetectionPipelineError
+    ) {
       return reply.code(error.statusCode).send({
         error: {
           code: error.code,

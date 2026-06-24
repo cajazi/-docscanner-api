@@ -15,6 +15,14 @@ const envSchema = z.object({
   ENHANCEMENT_PROCESSOR_BATCH_SIZE: z.coerce.number().int().positive().max(10).default(3),
   ENHANCEMENT_STORAGE_ROOT: z.string().default('C:\\tmp\\docscanner-api\\enhancements'),
   ENHANCEMENT_STORAGE_PUBLIC_BASE_URL: z.string().optional(),
+  EDGE_DETECTION_PROCESSOR_ENABLED: z.preprocess(
+    (value) => (typeof value === 'string' ? value.toLowerCase() !== 'false' : value),
+    z.boolean().default(false),
+  ),
+  EDGE_DETECTION_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(5000),
+  EDGE_DETECTION_BATCH_SIZE: z.coerce.number().int().positive().max(10).default(3),
+  EDGE_DETECTION_STORAGE_ROOT: z.string().default('C:\\tmp\\docscanner-api\\edge-detection'),
+  EDGE_DETECTION_STORAGE_PUBLIC_BASE_URL: z.string().optional(),
 });
 
 export const env = envSchema.parse(process.env);

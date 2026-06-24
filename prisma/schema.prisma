@@ -39,6 +39,13 @@ enum EnhancementStatus {
   FAILED
 }
 
+enum EdgeDetectionStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
 enum OCRProvider {
   TESSERACT_CLI
 }
@@ -104,6 +111,7 @@ model DocumentPage {
   documentId     String
   pageNumber     Int
   originalImageUrl String?
+  croppedImageUrl String?
   enhancedImageUrl String?
   ocrText        String?
   ocrLanguage    String?
@@ -118,12 +126,34 @@ model DocumentPage {
   document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
   ocrJobs OCRJob[]
   enhancementJobs EnhancementJob[]
+  edgeDetectionJobs EdgeDetectionJob[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([documentId])
   @@unique([documentId, pageNumber])
+}
+
+model EdgeDetectionJob {
+  id              String              @id @default(cuid())
+  pageId          String
+  status          EdgeDetectionStatus @default(PENDING)
+  provider        String              @default("heuristic")
+  sourceImageUrl  String
+  croppedImageUrl String?
+  corners         Json?
+  confidence      Float?
+  errorMessage    String?
+  metadata        Json?
+
+  page DocumentPage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([pageId])
+  @@index([status])
 }
 
 model EnhancementJob {

@@ -75,12 +75,14 @@ export async function engineRoutes(app: FastifyInstance, options: EngineRoutesOp
         futureOcrReadyImageConsumption: true,
       },
       edgeDetection: {
-        status: 'foundation',
-        provider: 'heuristic',
+        status: 'real-foundation',
+        provider: 'contour',
         supportsFourCorners: true,
         supportsPerspectiveCorrection: false,
         supportsCroppedOutput: true,
-        notes: 'Full CamScanner-style contour detection is future work',
+        contourDetectionImplemented: true,
+        perspectiveCorrectionImplemented: false,
+        notes: 'Contour-based document bounds detection is implemented; perspective correction is future work',
       },
       pdfExport: {
         status: 'foundation',

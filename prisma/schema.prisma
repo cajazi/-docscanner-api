@@ -23,12 +23,23 @@ enum ProcessingStatus {
   PROCESSING
   COMPLETED
   FAILED
+  CANCELLED
 }
 
 enum SubscriptionTier {
   FREE
   PRO
   BUSINESS
+}
+
+enum OCRProvider {
+  TESSERACT_CLI
+}
+
+enum OCRImageRole {
+  ORIGINAL
+  ENHANCED
+  CROPPED
 }
 
 model User {
@@ -71,6 +82,7 @@ model Document {
   searchableText String?
 
   pages DocumentPage[]
+  ocrJobs OCRJob[]
   user  User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
@@ -87,14 +99,51 @@ model DocumentPage {
   originalImageUrl String?
   enhancedImageUrl String?
   ocrText        String?
+  ocrLanguage    String?
+  ocrProvider    OCRProvider?
+  ocrLayout      Json?
+  ocrTextLayer   Json?
+  ocrSourceImageUrl String?
+  ocrSourceImageRole OCRImageRole?
+  ocrCompletedAt DateTime?
   processingStatus ProcessingStatus @default(PENDING)
 
   document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  ocrJobs OCRJob[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([documentId])
+  @@unique([documentId, pageNumber])
+}
+
+model OCRJob {
+  id             String           @id @default(cuid())
+  documentId     String
+  pageId         String
+  provider       OCRProvider
+  status         ProcessingStatus @default(PENDING)
+  language       String           @default("eng")
+  sourceImageUrl String
+  sourceImageRole OCRImageRole    @default(ORIGINAL)
+  extractedText  String?
+  layout         Json?
+  textLayer      Json?
+  errorCode      String?
+  errorMessage   String?
+  startedAt      DateTime?
+  completedAt    DateTime?
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  page DocumentPage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([documentId])
+  @@index([pageId])
+  @@index([status])
 }
 
 model Subscription {

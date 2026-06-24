@@ -4,6 +4,7 @@ import { LocalFileStorage } from '../storage/localFileStorage';
 import { PrismaEdgeDetectionRepository } from './edgeDetectionRepository';
 import { createEdgeDetectionProcessor, shouldEnableEdgeDetectionProcessor } from './edgeDetectionProcessor';
 import { EdgeDetectionService } from './edgeDetectionService';
+import { ContourEdgeDetectionProvider } from './providers/contourEdgeDetectionProvider';
 import { HeuristicEdgeDetectionProvider } from './providers/heuristicEdgeDetectionProvider';
 
 export function createDefaultEdgeDetectionPipeline() {
@@ -13,7 +14,10 @@ export function createDefaultEdgeDetectionPipeline() {
     publicBaseUrl: env.EDGE_DETECTION_STORAGE_PUBLIC_BASE_URL,
   });
   const repository = new PrismaEdgeDetectionRepository(prisma);
-  const provider = new HeuristicEdgeDetectionProvider(storage);
+  const provider =
+    env.EDGE_DETECTION_PROVIDER === 'contour'
+      ? new ContourEdgeDetectionProvider(storage)
+      : new HeuristicEdgeDetectionProvider(storage);
   const service = new EdgeDetectionService(repository, provider);
   const processor = createEdgeDetectionProcessor(service, {
     enabled: shouldEnableEdgeDetectionProcessor(env.NODE_ENV, env.EDGE_DETECTION_PROCESSOR_ENABLED),

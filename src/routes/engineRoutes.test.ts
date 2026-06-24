@@ -73,12 +73,13 @@ describe('engineRoutes', () => {
         futureOcrReadyImageConsumption: true,
       },
       edgeDetection: {
-        status: 'foundation',
-        provider: 'heuristic',
+        status: 'real-foundation',
+        provider: 'contour',
         supportsFourCorners: true,
         supportsPerspectiveCorrection: false,
         supportsCroppedOutput: true,
-        notes: 'Full CamScanner-style contour detection is future work',
+        contourDetectionImplemented: true,
+        perspectiveCorrectionImplemented: false,
       },
       pdfExport: {
         status: 'foundation',

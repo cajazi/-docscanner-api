@@ -89,6 +89,11 @@ export async function engineRoutes(app: FastifyInstance, options: EngineRoutesOp
         supportsSearchablePdf: false,
         usesScanSourceResolver: true,
       },
+      searchablePdf: {
+        status: 'foundation',
+        invisibleTextLayerImplemented: false,
+        textLayerMetadataImplemented: true,
+      },
     };
   });
 

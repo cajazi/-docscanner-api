@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ScanSourceRole } from '../scanSource/types';
+import { SearchablePdfService } from '../searchablePdf/searchablePdfService';
 import { PdfExportPipelineError, PdfExportService } from './pdfExportService';
 import type {
   CompletePdfExportJobInput,
@@ -142,6 +143,23 @@ function createProvider(overrides: Partial<PdfExportProvider> = {}) {
   return { provider, calls };
 }
 
+function createSearchablePdfService() {
+  return new SearchablePdfService({
+    async findDocumentWithOcrPages(documentId) {
+      return {
+        id: documentId,
+        pages: [
+          { id: 'page_1', pageNumber: 1, ocrText: 'First searchable page', ocrLayout: null, ocrTextLayer: null },
+          { id: 'page_2', pageNumber: 2, ocrText: 'Second searchable page', ocrLayout: null, ocrTextLayer: null },
+        ],
+      };
+    },
+    async updateSearchablePdfMetadata() {
+      return undefined;
+    },
+  });
+}
+
 describe('PdfExportService', () => {
   it('creates a PDF export job with resolved ordered pages metadata', async () => {
     const repository = new InMemoryPdfExportRepository(documentFixture());
@@ -232,6 +250,31 @@ describe('PdfExportService', () => {
     expect(repository.completedInput?.metadata).toMatchObject({
       result: {
         searchablePdfImplemented: false,
+      },
+    });
+  });
+
+  it('stores searchable text layer metadata when requested', async () => {
+    const repository = new InMemoryPdfExportRepository(documentFixture());
+    const { provider } = createProvider();
+    const service = new PdfExportService(repository, provider, createSearchablePdfService());
+    const pending = await service.createJob({
+      documentId: 'doc_1',
+      options: { searchable: true, includeOcrTextLayer: true },
+    });
+
+    const completed = await service.processJob(pending.id);
+
+    expect(completed?.metadata).toMatchObject({
+      searchablePdf: {
+        requested: true,
+        textLayerMetadataImplemented: true,
+        invisibleTextLayerImplemented: false,
+        textLayer: {
+          documentId: 'doc_1',
+          searchableText: 'First searchable page\n\nSecond searchable page',
+          pageCount: 2,
+        },
       },
     });
   });

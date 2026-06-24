@@ -1,5 +1,6 @@
 import { env } from '../config/env';
 import { createPrismaClient } from '../db/prisma';
+import { createDefaultSearchablePdfService } from '../searchablePdf';
 import { LocalFileStorage } from '../storage/localFileStorage';
 import { PrismaPdfExportRepository } from './pdfExportRepository';
 import { createPdfExportProcessor, shouldEnablePdfExportProcessor } from './pdfExportProcessor';
@@ -14,7 +15,8 @@ export function createDefaultPdfExportPipeline() {
   });
   const repository = new PrismaPdfExportRepository(prisma);
   const provider = new PdfLibPdfExportProvider(storage);
-  const service = new PdfExportService(repository, provider);
+  const searchablePdf = createDefaultSearchablePdfService();
+  const service = new PdfExportService(repository, provider, searchablePdf.service);
   const processor = createPdfExportProcessor(service, {
     enabled: shouldEnablePdfExportProcessor(env.NODE_ENV, env.PDF_EXPORT_PROCESSOR_ENABLED),
     pollMs: env.PDF_EXPORT_POLL_INTERVAL_MS,
@@ -26,6 +28,7 @@ export function createDefaultPdfExportPipeline() {
     processor,
     async close() {
       processor?.stop();
+      await searchablePdf.close();
       await prisma.$disconnect();
     },
   };

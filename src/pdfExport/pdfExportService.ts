@@ -1,5 +1,7 @@
 import { resolvePageImageSource, ScanSourceResolutionError } from '../scanSource/scanSourceResolver';
 import { ScanConsumer } from '../scanSource/types';
+import type { SearchablePdfService } from '../searchablePdf/searchablePdfService';
+import type { SearchablePdfTextLayer } from '../searchablePdf/types';
 import type {
   PdfExportJobRecord,
   PdfExportOptions,
@@ -33,6 +35,7 @@ export class PdfExportService {
   constructor(
     private readonly repository: PdfExportRepository,
     private readonly provider: PdfExportProvider,
+    private readonly searchablePdfService?: SearchablePdfService,
   ) {}
 
   async createJob(input: CreatePdfExportJobRequest): Promise<PdfExportJobRecord> {
@@ -78,6 +81,7 @@ export class PdfExportService {
       }
 
       const pages = this.resolvePages(document.pages);
+      const textLayer = await this.buildOptionalTextLayer(claimedJob.documentId, options);
       const result = await this.provider.export({
         documentId: claimedJob.documentId,
         pages,
@@ -92,6 +96,7 @@ export class PdfExportService {
         pageCount: result.pageCount,
         metadata: {
           ...readMetadataObject(claimedJob.metadata),
+          searchablePdf: buildSearchablePdfMetadata(textLayer, options),
           result: result.metadata,
         },
       });
@@ -105,6 +110,14 @@ export class PdfExportService {
         },
       });
     }
+  }
+
+  private async buildOptionalTextLayer(documentId: string, options: PdfExportOptions) {
+    if (!this.searchablePdfService || (!options.searchable && !options.includeOcrTextLayer)) {
+      return null;
+    }
+
+    return this.searchablePdfService.buildTextLayer(documentId);
   }
 
   async processNextPendingJobs(limit: number): Promise<PromiseSettledResult<PdfExportJobRecord | null>[]> {
@@ -185,4 +198,13 @@ function buildOutputKey(documentId: string, jobId: string) {
 
 function readMetadataObject(metadata: unknown): Record<string, unknown> {
   return metadata && typeof metadata === 'object' && !Array.isArray(metadata) ? { ...metadata } : {};
+}
+
+function buildSearchablePdfMetadata(textLayer: SearchablePdfTextLayer | null, options: PdfExportOptions) {
+  return {
+    requested: options.searchable || options.includeOcrTextLayer,
+    textLayerMetadataImplemented: Boolean(textLayer),
+    invisibleTextLayerImplemented: false,
+    textLayer,
+  };
 }

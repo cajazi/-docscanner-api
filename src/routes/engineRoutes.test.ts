@@ -87,6 +87,11 @@ describe('engineRoutes', () => {
         supportsSearchablePdf: false,
         usesScanSourceResolver: true,
       },
+      searchablePdf: {
+        status: 'foundation',
+        invisibleTextLayerImplemented: false,
+        textLayerMetadataImplemented: true,
+      },
     });
   });
 

@@ -93,7 +93,7 @@ describe('engineRoutes', () => {
       },
       edgeDetection: {
         status: 'real-foundation',
-        provider: 'cv-pipeline',
+        provider: 'typescript-cv',
         supportsFourCorners: true,
         supportsPerspectiveCorrection: false,
         supportsCroppedOutput: true,
@@ -103,6 +103,13 @@ describe('engineRoutes', () => {
         nativeOpenCvImplemented: false,
         detectionMode: 'cv-pipeline-foundation',
         perspectiveCorrectionImplemented: false,
+      },
+      cvPipeline: {
+        nativeOpenCvImplemented: false,
+        nativeAvailable: false,
+        provider: 'typescript-cv',
+        fallbackSupported: true,
+        opencvVersion: null,
       },
       pdfExport: {
         status: 'foundation',

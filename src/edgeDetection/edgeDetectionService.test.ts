@@ -146,12 +146,11 @@ describe('EdgeDetectionService', () => {
     expect(job.sourceImageUrl).toBe('C:\\tmp\\original.jpg');
     expect(job.metadata).toMatchObject({
       params: { perspectiveCorrection: true, outputCroppedImage: true },
-      sourceSelection: 'originalImageUrl',
-      croppedSourceAvoidedByDefault: true,
+      sourceRole: 'ORIGINAL',
     });
   });
 
-  it('falls back to enhanced image only when original is missing', async () => {
+  it('requires original image and does not fall back to enhanced image', async () => {
     const repository = new InMemoryEdgeDetectionRepository({
       id: 'page_1',
       documentId: 'doc_1',
@@ -161,10 +160,10 @@ describe('EdgeDetectionService', () => {
     });
     const service = new EdgeDetectionService(repository, createProvider());
 
-    const job = await service.createJob({ documentId: 'doc_1', pageId: 'page_1' });
-
-    expect(job.sourceImageUrl).toBe('C:\\tmp\\enhanced.jpg');
-    expect(job.metadata).toMatchObject({ sourceSelection: 'enhancedImageUrl' });
+    await expect(service.createJob({ documentId: 'doc_1', pageId: 'page_1' })).rejects.toMatchObject({
+      code: 'PAGE_IMAGE_MISSING',
+      statusCode: 409,
+    });
   });
 
   it('returns an existing pending or processing job for the same page', async () => {

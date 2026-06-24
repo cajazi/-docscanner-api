@@ -1,11 +1,11 @@
 import type { OCRImageRole, OCRJobRecord, OCRPipelineRepository, OCRProvider } from './types';
+import { resolvePageImageSource, ScanSourceResolutionError } from '../scanSource/scanSourceResolver';
+import { ScanConsumer, type ResolvedScanSource } from '../scanSource/types';
 
 export type StartPageOCRInput = {
   documentId: string;
   pageId: string;
   language?: string;
-  sourceImageRole?: OCRImageRole;
-  sourceImageUrl?: string;
 };
 
 export class OCRPipelineError extends Error {
@@ -30,9 +30,8 @@ export class OCRPipelineService {
       throw new OCRPipelineError('PAGE_NOT_FOUND', 'Document page was not found', 404);
     }
 
-    const sourceImageRole = input.sourceImageRole ?? 'ENHANCED';
-    const sourceImageUrl = input.sourceImageUrl ?? this.pickSourceImage(page, sourceImageRole);
-    if (!sourceImageUrl) {
+    const resolvedSource = this.resolveSource(page);
+    if (!resolvedSource.imageUrl) {
       throw new OCRPipelineError('PAGE_IMAGE_MISSING', 'Document page does not have an OCR source image', 409);
     }
 
@@ -42,15 +41,15 @@ export class OCRPipelineService {
       pageId: input.pageId,
       provider: this.provider.name,
       language,
-      sourceImageUrl,
-      sourceImageRole,
+      sourceImageUrl: resolvedSource.imageUrl,
+      sourceImageRole: resolvedSource.role as OCRImageRole,
     });
 
     await this.repository.markJobProcessing(job.id, input.pageId);
 
     try {
       const result = await this.provider.recognizePage({
-        imageUri: sourceImageUrl,
+        imageUri: resolvedSource.imageUrl,
         language,
       });
 
@@ -60,8 +59,8 @@ export class OCRPipelineService {
         documentId: input.documentId,
         provider: this.provider.name,
         language,
-        sourceImageUrl,
-        sourceImageRole,
+        sourceImageUrl: resolvedSource.imageUrl,
+        sourceImageRole: resolvedSource.role as OCRImageRole,
         result,
       });
     } catch (error) {
@@ -85,18 +84,19 @@ export class OCRPipelineService {
     return job;
   }
 
-  private pickSourceImage(
-    page: { originalImageUrl: string | null; croppedImageUrl: string | null; enhancedImageUrl: string | null },
-    sourceImageRole: OCRImageRole,
-  ) {
-    if (sourceImageRole === 'ORIGINAL') {
-      return page.originalImageUrl;
-    }
+  private resolveSource(page: {
+    originalImageUrl: string | null;
+    croppedImageUrl: string | null;
+    enhancedImageUrl: string | null;
+  }): ResolvedScanSource {
+    try {
+      return resolvePageImageSource(page, ScanConsumer.OCR);
+    } catch (error) {
+      if (error instanceof ScanSourceResolutionError) {
+        throw new OCRPipelineError('PAGE_IMAGE_MISSING', error.message, 409);
+      }
 
-    if (sourceImageRole === 'CROPPED') {
-      return page.croppedImageUrl ?? page.enhancedImageUrl ?? page.originalImageUrl;
+      throw error;
     }
-
-    return page.enhancedImageUrl ?? page.originalImageUrl;
   }
 }

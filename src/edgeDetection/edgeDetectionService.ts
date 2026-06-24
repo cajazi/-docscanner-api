@@ -5,6 +5,8 @@ import type {
   EdgeDetectionParams,
   EdgeDetectionRepository,
 } from './types';
+import { resolvePageImageSource, ScanSourceResolutionError } from '../scanSource/scanSourceResolver';
+import { ScanConsumer } from '../scanSource/types';
 
 export class EdgeDetectionPipelineError extends Error {
   constructor(
@@ -33,8 +35,8 @@ export class EdgeDetectionService {
       throw new EdgeDetectionPipelineError('PAGE_NOT_FOUND', 'Document page was not found', 404);
     }
 
-    const sourceImageUrl = page.originalImageUrl ?? page.enhancedImageUrl;
-    if (!sourceImageUrl) {
+    const source = this.resolveSource(page);
+    if (!source.imageUrl) {
       throw new EdgeDetectionPipelineError(
         'PAGE_IMAGE_MISSING',
         'Document page does not have a usable image for edge detection',
@@ -51,11 +53,10 @@ export class EdgeDetectionService {
     return this.repository.create({
       pageId: input.pageId,
       provider: this.provider.name,
-      sourceImageUrl,
+      sourceImageUrl: source.imageUrl,
       metadata: {
         params,
-        sourceSelection: page.originalImageUrl ? 'originalImageUrl' : 'enhancedImageUrl',
-        croppedSourceAvoidedByDefault: Boolean(page.croppedImageUrl),
+        sourceRole: source.role,
       },
     });
   }
@@ -110,6 +111,22 @@ export class EdgeDetectionService {
     }
 
     return job;
+  }
+
+  private resolveSource(page: {
+    originalImageUrl: string | null;
+    croppedImageUrl: string | null;
+    enhancedImageUrl: string | null;
+  }) {
+    try {
+      return resolvePageImageSource(page, ScanConsumer.EDGE_DETECTION);
+    } catch (error) {
+      if (error instanceof ScanSourceResolutionError) {
+        throw new EdgeDetectionPipelineError('PAGE_IMAGE_MISSING', error.message, 409);
+      }
+
+      throw error;
+    }
   }
 }
 

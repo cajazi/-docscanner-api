@@ -29,6 +29,7 @@ export type EnhancementPageTarget = {
   id: string;
   documentId: string;
   originalImageUrl: string | null;
+  croppedImageUrl: string | null;
   enhancedImageUrl: string | null;
 };
 

@@ -119,6 +119,7 @@ describe('EnhancementService', () => {
       id: 'page_1',
       documentId: 'doc_1',
       originalImageUrl: 'C:\\tmp\\scan.jpg',
+      croppedImageUrl: null,
       enhancedImageUrl: null,
     });
     const service = new EnhancementService(repository, createProvider());
@@ -133,6 +134,7 @@ describe('EnhancementService', () => {
     expect(job.provider).toBe('SHARP');
     expect(job.originalImageUrl).toBe('C:\\tmp\\scan.jpg');
     expect(job.metadata).toMatchObject({
+      sourceRole: 'ORIGINAL',
       params: {
         mode: 'document',
         deskew: true,
@@ -146,6 +148,7 @@ describe('EnhancementService', () => {
       id: 'page_1',
       documentId: 'doc_1',
       originalImageUrl: 'C:\\tmp\\scan.jpg',
+      croppedImageUrl: null,
       enhancedImageUrl: null,
     });
     const service = new EnhancementService(repository, createProvider());
@@ -165,6 +168,7 @@ describe('EnhancementService', () => {
       id: 'page_1',
       documentId: 'doc_1',
       originalImageUrl: 'C:\\tmp\\scan.jpg',
+      croppedImageUrl: null,
       enhancedImageUrl: null,
     });
     const service = new EnhancementService(repository, createProvider());
@@ -188,6 +192,7 @@ describe('EnhancementService', () => {
       id: 'page_1',
       documentId: 'doc_1',
       originalImageUrl: 'C:\\tmp\\scan.jpg',
+      croppedImageUrl: null,
       enhancedImageUrl: null,
     });
     const service = new EnhancementService(
@@ -212,6 +217,7 @@ describe('EnhancementService', () => {
       id: 'page_1',
       documentId: 'doc_1',
       originalImageUrl: 'C:\\tmp\\scan.jpg',
+      croppedImageUrl: null,
       enhancedImageUrl: null,
     });
     const service = new EnhancementService(repository, createProvider());

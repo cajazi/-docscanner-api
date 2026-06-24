@@ -87,6 +87,7 @@ export class PdfExportService {
         pages,
         outputStorageKey: buildOutputKey(claimedJob.documentId, claimedJob.id),
         options,
+        textLayer,
       });
 
       return this.repository.markCompleted({
@@ -96,7 +97,7 @@ export class PdfExportService {
         pageCount: result.pageCount,
         metadata: {
           ...readMetadataObject(claimedJob.metadata),
-          searchablePdf: buildSearchablePdfMetadata(textLayer, options),
+          searchablePdf: buildSearchablePdfMetadata(textLayer, options, result.metadata),
           result: result.metadata,
         },
       });
@@ -200,11 +201,15 @@ function readMetadataObject(metadata: unknown): Record<string, unknown> {
   return metadata && typeof metadata === 'object' && !Array.isArray(metadata) ? { ...metadata } : {};
 }
 
-function buildSearchablePdfMetadata(textLayer: SearchablePdfTextLayer | null, options: PdfExportOptions) {
+function buildSearchablePdfMetadata(
+  textLayer: SearchablePdfTextLayer | null,
+  options: PdfExportOptions,
+  providerMetadata: Record<string, unknown>,
+) {
   return {
     requested: options.searchable || options.includeOcrTextLayer,
     textLayerMetadataImplemented: Boolean(textLayer),
-    invisibleTextLayerImplemented: false,
+    invisibleTextLayerImplemented: providerMetadata.invisibleTextLayerImplemented === true,
     textLayer,
   };
 }

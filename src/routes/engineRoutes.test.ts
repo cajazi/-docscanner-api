@@ -89,7 +89,7 @@ describe('engineRoutes', () => {
       },
       searchablePdf: {
         status: 'foundation',
-        invisibleTextLayerImplemented: false,
+        invisibleTextLayerImplemented: true,
         textLayerMetadataImplemented: true,
       },
     });

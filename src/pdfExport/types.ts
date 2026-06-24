@@ -1,4 +1,5 @@
 import type { ScanSourceRole } from '../scanSource/types';
+import type { SearchablePdfTextLayer } from '../searchablePdf/types';
 
 export type PdfExportStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
 export type PdfPageSize = 'A4' | 'AUTO';
@@ -21,6 +22,7 @@ export type PdfExportProviderInput = {
   pages: PdfExportPage[];
   outputStorageKey: string;
   options: PdfExportOptions;
+  textLayer?: SearchablePdfTextLayer | null;
 };
 
 export type PdfExportProviderResult = {

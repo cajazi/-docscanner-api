@@ -5,6 +5,8 @@ import { EnhancementPipelineError, type EnhancementService } from '../enhancemen
 import { EdgeDetectionPipelineError, type EdgeDetectionService } from '../edgeDetection/edgeDetectionService';
 import { PdfExportPipelineError, type PdfExportService } from '../pdfExport/pdfExportService';
 import { ScanPipelineError, toProcessPageResponse, type ScanPipelineService } from '../scanPipeline/scanPipelineService';
+import { getOpenCvCapabilities } from '../opencv';
+import { env } from '../config/env';
 
 type EngineRoutesOptions = {
   ocrPipelineService: OCRPipelineService;
@@ -51,6 +53,8 @@ const createPdfExportJobSchema = z.object({
 
 export async function engineRoutes(app: FastifyInstance, options: EngineRoutesOptions) {
   app.get('/engine/capabilities', async () => {
+    const cvPipeline = getOpenCvCapabilities(env.CV_PROVIDER);
+
     return {
       engine: 'docscanner-api',
       parityTarget: 'CamScanner-style document scanning engine',
@@ -82,7 +86,7 @@ export async function engineRoutes(app: FastifyInstance, options: EngineRoutesOp
       },
       edgeDetection: {
         status: 'real-foundation',
-        provider: 'cv-pipeline',
+        provider: cvPipeline.provider,
         supportsFourCorners: true,
         supportsPerspectiveCorrection: false,
         supportsCroppedOutput: true,
@@ -94,6 +98,7 @@ export async function engineRoutes(app: FastifyInstance, options: EngineRoutesOp
         perspectiveCorrectionImplemented: false,
         notes: 'OpenCV-style CV pipeline foundation is implemented in TypeScript; native OpenCV and full CamScanner parity remain future work',
       },
+      cvPipeline,
       pdfExport: {
         status: 'foundation',
         provider: 'pdf-lib',

@@ -7,6 +7,7 @@ import { EdgeDetectionService } from './edgeDetectionService';
 import { CvQuadDetectionProvider } from './cv/cvQuadDetectionProvider';
 import { ContourEdgeDetectionProvider } from './providers/contourEdgeDetectionProvider';
 import { HeuristicEdgeDetectionProvider } from './providers/heuristicEdgeDetectionProvider';
+import { OpenCvProvider } from '../opencv';
 
 export function createDefaultEdgeDetectionPipeline() {
   const prisma = createPrismaClient();
@@ -35,7 +36,7 @@ export function createDefaultEdgeDetectionPipeline() {
 
 function createEdgeDetectionProvider(providerName: 'heuristic' | 'contour' | 'cv', storage: LocalFileStorage) {
   if (providerName === 'cv') {
-    return new CvQuadDetectionProvider(storage);
+    return new OpenCvProvider(storage, { preference: env.CV_PROVIDER });
   }
 
   if (providerName === 'contour') {

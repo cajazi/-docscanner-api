@@ -32,6 +32,13 @@ enum SubscriptionTier {
   BUSINESS
 }
 
+enum EnhancementStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
 enum OCRProvider {
   TESSERACT_CLI
 }
@@ -110,12 +117,32 @@ model DocumentPage {
 
   document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
   ocrJobs OCRJob[]
+  enhancementJobs EnhancementJob[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([documentId])
   @@unique([documentId, pageNumber])
+}
+
+model EnhancementJob {
+  id               String            @id @default(cuid())
+  pageId           String
+  status           EnhancementStatus @default(PENDING)
+  provider         String
+  originalImageUrl String
+  enhancedImageUrl String?
+  errorMessage     String?
+  metadata         Json?
+
+  page DocumentPage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([pageId])
+  @@index([status])
 }
 
 model OCRJob {

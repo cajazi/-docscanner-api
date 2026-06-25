@@ -9,7 +9,7 @@ import type { EdgeDetectionProvider } from '../edgeDetection/providers/edgeDetec
 import type { EdgeDetectionRepository } from '../edgeDetection/types';
 import { PdfExportPipelineError, PdfExportService } from '../pdfExport/pdfExportService';
 import type { PdfExportProvider, PdfExportRepository } from '../pdfExport/types';
-import { ScanPipelineService } from '../scanPipeline/scanPipelineService';
+import { ScanPipelineError, ScanPipelineService } from '../scanPipeline/scanPipelineService';
 import type { SearchablePdfService } from '../searchablePdf/searchablePdfService';
 import { UploadContractError, type UploadContractService } from '../uploadContract/uploadContractService';
 
@@ -766,6 +766,175 @@ describe('engineRoutes', () => {
       failedStages: [],
       finalImageRole: 'ENHANCED',
       searchableReady: true,
+    });
+  });
+
+  it('gets process job status through the scan pipeline service', async () => {
+    const app = await buildApp({
+      ocrPipelineService: createOCRService(),
+      enhancementService: createEnhancementService(),
+      edgeDetectionService: createEdgeDetectionService(),
+      pdfExportService: createPdfExportService(),
+      scanPipelineService: createScanPipelineService({
+        getPipelineRun(jobId) {
+          return {
+            pipelineId: jobId,
+            documentId: 'doc_1',
+            pageId: 'page_1',
+            pipelineVersion: 'scan-pipeline-v1',
+            completedStages: ['QUAD_DETECTION', 'ENHANCEMENT', 'OCR', 'SEARCHABLE_METADATA'],
+            failedStages: [],
+            fallbackStages: ['PERSPECTIVE_CORRECTION'],
+            finalImageRole: 'ENHANCED',
+            processingDurationMs: 12,
+            searchableReady: true,
+            edgeDetectionJob: {
+              id: 'edge_job_1',
+              pageId: 'page_1',
+              status: 'COMPLETED',
+              provider: 'cv',
+              sourceImageUrl: 'original.jpg',
+              croppedImageUrl: 'cropped.jpg',
+              corners: null,
+              confidence: null,
+              errorMessage: null,
+              metadata: {},
+              createdAt: new Date('2026-06-25T10:00:00.000Z'),
+              updatedAt: new Date('2026-06-25T10:00:01.000Z'),
+            },
+            enhancementJob: null,
+            ocrJob: null,
+            searchableTextLayer: null,
+          };
+        },
+      }),
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/engine/process-jobs/pipeline_1',
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      id: 'pipeline_1',
+      status: 'COMPLETED',
+      completedStages: ['QUAD_DETECTION', 'ENHANCEMENT', 'OCR', 'SEARCHABLE_METADATA'],
+      failedStages: [],
+      fallbackStages: ['PERSPECTIVE_CORRECTION'],
+      finalImageRole: 'ENHANCED',
+      searchableReady: true,
+      errorMessage: null,
+      updatedAt: '2026-06-25T10:00:01.000Z',
+    });
+  });
+
+  it('returns 404 when process job status is missing', async () => {
+    const app = await buildApp({
+      ocrPipelineService: createOCRService(),
+      enhancementService: createEnhancementService(),
+      edgeDetectionService: createEdgeDetectionService(),
+      pdfExportService: createPdfExportService(),
+      scanPipelineService: createScanPipelineService({
+        getPipelineRun() {
+          throw new ScanPipelineError('SCAN_PIPELINE_NOT_FOUND', 'Scan pipeline run was not found', 404);
+        },
+      }),
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/engine/process-jobs/missing',
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({
+      error: {
+        code: 'SCAN_PIPELINE_NOT_FOUND',
+        message: 'Scan pipeline run was not found',
+      },
+    });
+  });
+
+  it('returns the Android process job response shape for failed runs', async () => {
+    const app = await buildApp({
+      ocrPipelineService: createOCRService(),
+      enhancementService: createEnhancementService(),
+      edgeDetectionService: createEdgeDetectionService(),
+      pdfExportService: createPdfExportService(),
+      scanPipelineService: createScanPipelineService({
+        getPipelineRun(jobId) {
+          return {
+            pipelineId: jobId,
+            documentId: 'doc_1',
+            pageId: 'page_1',
+            pipelineVersion: 'scan-pipeline-v1',
+            completedStages: ['QUAD_DETECTION'],
+            failedStages: [{ stage: 'OCR', errorMessage: 'OCR failed' }],
+            fallbackStages: ['PERSPECTIVE_CORRECTION'],
+            finalImageRole: 'CROPPED',
+            processingDurationMs: 19,
+            searchableReady: false,
+            edgeDetectionJob: null,
+            enhancementJob: null,
+            ocrJob: {
+              id: 'ocr_job_1',
+              documentId: 'doc_1',
+              pageId: 'page_1',
+              provider: 'TESSERACT_CLI',
+              status: 'FAILED',
+              language: 'eng',
+              sourceImageUrl: 'cropped.jpg',
+              sourceImageRole: 'CROPPED',
+              extractedText: null,
+              layout: null,
+              textLayer: null,
+              errorCode: 'OCR_FAILED',
+              errorMessage: 'OCR failed',
+              startedAt: new Date('2026-06-25T10:00:00.000Z'),
+              completedAt: new Date('2026-06-25T10:00:02.000Z'),
+              createdAt: new Date('2026-06-25T10:00:00.000Z'),
+              updatedAt: new Date('2026-06-25T10:00:02.000Z'),
+            },
+            searchableTextLayer: null,
+          };
+        },
+      }),
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/engine/process-jobs/pipeline_failed',
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(Object.keys(response.json())).toEqual([
+      'id',
+      'status',
+      'completedStages',
+      'failedStages',
+      'fallbackStages',
+      'finalImageRole',
+      'searchableReady',
+      'errorMessage',
+      'updatedAt',
+    ]);
+    expect(response.json()).toMatchObject({
+      id: 'pipeline_failed',
+      status: 'FAILED',
+      completedStages: ['QUAD_DETECTION'],
+      failedStages: [{ stage: 'OCR', errorMessage: 'OCR failed' }],
+      fallbackStages: ['PERSPECTIVE_CORRECTION'],
+      finalImageRole: 'CROPPED',
+      searchableReady: false,
+      errorMessage: 'OCR failed',
+      updatedAt: '2026-06-25T10:00:02.000Z',
     });
   });
 

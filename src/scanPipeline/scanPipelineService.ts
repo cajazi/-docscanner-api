@@ -222,3 +222,31 @@ export function toProcessPageResponse(result: ScanPipelineResult) {
     searchableReady: result.searchableReady,
   };
 }
+
+export function toProcessJobStatusResponse(result: ScanPipelineResult) {
+  return {
+    id: result.pipelineId,
+    status: result.failedStages.length > 0 ? 'FAILED' : 'COMPLETED',
+    completedStages: result.completedStages,
+    failedStages: result.failedStages,
+    fallbackStages: result.fallbackStages,
+    finalImageRole: result.finalImageRole,
+    searchableReady: result.searchableReady,
+    errorMessage: result.failedStages[0]?.errorMessage ?? null,
+    updatedAt: resolvePipelineUpdatedAt(result),
+  };
+}
+
+function resolvePipelineUpdatedAt(result: ScanPipelineResult) {
+  const timestamps = [
+    result.edgeDetectionJob?.updatedAt,
+    result.enhancementJob?.updatedAt,
+    result.ocrJob?.updatedAt,
+  ].filter((value): value is Date => value instanceof Date);
+
+  if (timestamps.length === 0) {
+    return new Date();
+  }
+
+  return new Date(Math.max(...timestamps.map((value) => value.getTime())));
+}

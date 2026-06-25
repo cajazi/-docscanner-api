@@ -4,7 +4,12 @@ import { OCRPipelineError, type OCRPipelineService } from '../ocr/ocrPipelineSer
 import { EnhancementPipelineError, type EnhancementService } from '../enhancement/enhancementService';
 import { EdgeDetectionPipelineError, type EdgeDetectionService } from '../edgeDetection/edgeDetectionService';
 import { PdfExportPipelineError, type PdfExportService } from '../pdfExport/pdfExportService';
-import { ScanPipelineError, toProcessPageResponse, type ScanPipelineService } from '../scanPipeline/scanPipelineService';
+import {
+  ScanPipelineError,
+  toProcessJobStatusResponse,
+  toProcessPageResponse,
+  type ScanPipelineService,
+} from '../scanPipeline/scanPipelineService';
 import { getOpenCvCapabilities } from '../opencv';
 import { env } from '../config/env';
 import {
@@ -289,6 +294,17 @@ export async function engineRoutes(app: FastifyInstance, options: EngineRoutesOp
     });
 
     return reply.code(202).send(toProcessPageResponse(result));
+  });
+
+  app.get('/engine/process-jobs/:jobId', async (request) => {
+    const params = z
+      .object({
+        jobId: z.string().min(1),
+      })
+      .parse(request.params);
+
+    const result = options.scanPipelineService.getPipelineRun(params.jobId);
+    return toProcessJobStatusResponse(result);
   });
 
   app.post('/engine/documents/:documentId/pdf-export-jobs', async (request, reply) => {

@@ -10,6 +10,7 @@ import type { EdgeDetectionRepository } from '../edgeDetection/types';
 import { PdfExportPipelineError, PdfExportService } from '../pdfExport/pdfExportService';
 import type { PdfExportProvider, PdfExportRepository } from '../pdfExport/types';
 import { ScanPipelineError, ScanPipelineService } from '../scanPipeline/scanPipelineService';
+import type { ScanPipelineResult } from '../scanPipeline/scanPipelineTypes';
 import type { SearchablePdfService } from '../searchablePdf/searchablePdfService';
 import { UploadContractError, type UploadContractService } from '../uploadContract/uploadContractService';
 
@@ -89,6 +90,64 @@ function createMultipartPayload(input: { fieldName?: string; filename: string; m
       'content-type': `multipart/form-data; boundary=${boundary}`,
     },
   };
+}
+
+const processJobUpdatedAt = new Date('2026-06-25T10:00:02.000Z');
+
+function createProcessRun(overrides: Partial<ScanPipelineResult> = {}): ScanPipelineResult {
+  return {
+    pipelineId: 'pipeline_1',
+    documentId: 'doc_1',
+    pageId: 'page_1',
+    pipelineVersion: 'scan-pipeline-v1',
+    completedStages: ['QUAD_DETECTION', 'ENHANCEMENT', 'OCR', 'SEARCHABLE_METADATA'],
+    failedStages: [],
+    fallbackStages: [],
+    finalImageRole: 'ENHANCED' as ScanPipelineResult['finalImageRole'],
+    processingDurationMs: 12,
+    searchableReady: true,
+    edgeDetectionJob: null,
+    enhancementJob: null,
+    ocrJob: null,
+    searchableTextLayer: null,
+    ...overrides,
+  };
+}
+
+function createProcessEdgeJob(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'edge_job_1',
+    pageId: 'page_1',
+    status: 'COMPLETED',
+    provider: 'cv',
+    sourceImageUrl: 'original.jpg',
+    croppedImageUrl: 'cropped.jpg',
+    corners: null,
+    confidence: null,
+    errorMessage: null,
+    metadata: {},
+    createdAt: new Date('2026-06-25T10:00:00.000Z'),
+    updatedAt: processJobUpdatedAt,
+    ...overrides,
+  } as ScanPipelineResult['edgeDetectionJob'];
+}
+
+function createProcessEnhancementJob(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'enhancement_job_1',
+    pageId: 'page_1',
+    status: 'COMPLETED',
+    provider: 'SHARP',
+    originalImageUrl: 'cropped.jpg',
+    enhancedImageUrl: 'enhanced.jpg',
+    errorMessage: null,
+    metadata: {
+      sourceRole: 'CROPPED',
+    },
+    createdAt: new Date('2026-06-25T10:00:00.000Z'),
+    updatedAt: processJobUpdatedAt,
+    ...overrides,
+  } as ScanPipelineResult['enhancementJob'];
 }
 
 describe('engineRoutes', () => {
@@ -777,35 +836,12 @@ describe('engineRoutes', () => {
       pdfExportService: createPdfExportService(),
       scanPipelineService: createScanPipelineService({
         getPipelineRun(jobId) {
-          return {
+          return createProcessRun({
             pipelineId: jobId,
-            documentId: 'doc_1',
-            pageId: 'page_1',
-            pipelineVersion: 'scan-pipeline-v1',
-            completedStages: ['QUAD_DETECTION', 'ENHANCEMENT', 'OCR', 'SEARCHABLE_METADATA'],
-            failedStages: [],
             fallbackStages: ['PERSPECTIVE_CORRECTION'],
-            finalImageRole: 'ENHANCED',
-            processingDurationMs: 12,
-            searchableReady: true,
-            edgeDetectionJob: {
-              id: 'edge_job_1',
-              pageId: 'page_1',
-              status: 'COMPLETED',
-              provider: 'cv',
-              sourceImageUrl: 'original.jpg',
-              croppedImageUrl: 'cropped.jpg',
-              corners: null,
-              confidence: null,
-              errorMessage: null,
-              metadata: {},
-              createdAt: new Date('2026-06-25T10:00:00.000Z'),
-              updatedAt: new Date('2026-06-25T10:00:01.000Z'),
-            },
-            enhancementJob: null,
-            ocrJob: null,
-            searchableTextLayer: null,
-          };
+            edgeDetectionJob: createProcessEdgeJob({ updatedAt: new Date('2026-06-25T10:00:01.000Z') }),
+            enhancementJob: createProcessEnhancementJob({ updatedAt: new Date('2026-06-25T10:00:01.000Z') }),
+          });
         },
       }),
     });
@@ -825,9 +861,151 @@ describe('engineRoutes', () => {
       failedStages: [],
       fallbackStages: ['PERSPECTIVE_CORRECTION'],
       finalImageRole: 'ENHANCED',
+      originalImageUrl: 'original.jpg',
+      croppedImageUrl: 'cropped.jpg',
+      enhancedImageUrl: 'enhanced.jpg',
+      processedImageUrl: 'enhanced.jpg',
       searchableReady: true,
       errorMessage: null,
       updatedAt: '2026-06-25T10:00:01.000Z',
+    });
+  });
+
+  it('returns enhancedImageUrl as processedImageUrl for completed process jobs', async () => {
+    const app = await buildApp({
+      ocrPipelineService: createOCRService(),
+      enhancementService: createEnhancementService(),
+      edgeDetectionService: createEdgeDetectionService(),
+      pdfExportService: createPdfExportService(),
+      scanPipelineService: createScanPipelineService({
+        getPipelineRun() {
+          return createProcessRun({
+            edgeDetectionJob: createProcessEdgeJob(),
+            enhancementJob: createProcessEnhancementJob(),
+          });
+        },
+      }),
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/engine/process-jobs/pipeline_1',
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      originalImageUrl: 'original.jpg',
+      croppedImageUrl: 'cropped.jpg',
+      enhancedImageUrl: 'enhanced.jpg',
+      processedImageUrl: 'enhanced.jpg',
+      finalImageRole: 'ENHANCED',
+    });
+  });
+
+  it('falls back to croppedImageUrl when enhancedImageUrl is missing', async () => {
+    const app = await buildApp({
+      ocrPipelineService: createOCRService(),
+      enhancementService: createEnhancementService(),
+      edgeDetectionService: createEdgeDetectionService(),
+      pdfExportService: createPdfExportService(),
+      scanPipelineService: createScanPipelineService({
+        getPipelineRun() {
+          return createProcessRun({
+            edgeDetectionJob: createProcessEdgeJob(),
+            enhancementJob: createProcessEnhancementJob({
+              status: 'FAILED',
+              enhancedImageUrl: null,
+              errorMessage: 'enhancement failed',
+            }),
+          });
+        },
+      }),
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/engine/process-jobs/pipeline_1',
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      originalImageUrl: 'original.jpg',
+      croppedImageUrl: 'cropped.jpg',
+      enhancedImageUrl: null,
+      processedImageUrl: 'cropped.jpg',
+      finalImageRole: 'CROPPED',
+    });
+  });
+
+  it('falls back to originalImageUrl when cropped and enhanced URLs are missing', async () => {
+    const app = await buildApp({
+      ocrPipelineService: createOCRService(),
+      enhancementService: createEnhancementService(),
+      edgeDetectionService: createEdgeDetectionService(),
+      pdfExportService: createPdfExportService(),
+      scanPipelineService: createScanPipelineService({
+        getPipelineRun() {
+          return createProcessRun({
+            edgeDetectionJob: createProcessEdgeJob({ croppedImageUrl: null }),
+            enhancementJob: null,
+          });
+        },
+      }),
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/engine/process-jobs/pipeline_1',
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      originalImageUrl: 'original.jpg',
+      croppedImageUrl: null,
+      enhancedImageUrl: null,
+      processedImageUrl: 'original.jpg',
+      finalImageRole: 'ORIGINAL',
+    });
+  });
+
+  it('returns null processedImageUrl when no image URL exists', async () => {
+    const app = await buildApp({
+      ocrPipelineService: createOCRService(),
+      enhancementService: createEnhancementService(),
+      edgeDetectionService: createEdgeDetectionService(),
+      pdfExportService: createPdfExportService(),
+      scanPipelineService: createScanPipelineService({
+        getPipelineRun() {
+          return createProcessRun({
+            finalImageRole: 'ORIGINAL' as ScanPipelineResult['finalImageRole'],
+            edgeDetectionJob: null,
+            enhancementJob: null,
+            ocrJob: null,
+          });
+        },
+      }),
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/engine/process-jobs/pipeline_1',
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      originalImageUrl: null,
+      croppedImageUrl: null,
+      enhancedImageUrl: null,
+      processedImageUrl: null,
+      finalImageRole: null,
     });
   });
 
@@ -868,18 +1046,13 @@ describe('engineRoutes', () => {
       pdfExportService: createPdfExportService(),
       scanPipelineService: createScanPipelineService({
         getPipelineRun(jobId) {
-          return {
+          return createProcessRun({
             pipelineId: jobId,
-            documentId: 'doc_1',
-            pageId: 'page_1',
-            pipelineVersion: 'scan-pipeline-v1',
             completedStages: ['QUAD_DETECTION'],
             failedStages: [{ stage: 'OCR', errorMessage: 'OCR failed' }],
             fallbackStages: ['PERSPECTIVE_CORRECTION'],
-            finalImageRole: 'CROPPED',
-            processingDurationMs: 19,
             searchableReady: false,
-            edgeDetectionJob: null,
+            edgeDetectionJob: createProcessEdgeJob(),
             enhancementJob: null,
             ocrJob: {
               id: 'ocr_job_1',
@@ -901,7 +1074,7 @@ describe('engineRoutes', () => {
               updatedAt: new Date('2026-06-25T10:00:02.000Z'),
             },
             searchableTextLayer: null,
-          };
+          });
         },
       }),
     });
@@ -921,6 +1094,10 @@ describe('engineRoutes', () => {
       'failedStages',
       'fallbackStages',
       'finalImageRole',
+      'originalImageUrl',
+      'croppedImageUrl',
+      'enhancedImageUrl',
+      'processedImageUrl',
       'searchableReady',
       'errorMessage',
       'updatedAt',
@@ -932,6 +1109,10 @@ describe('engineRoutes', () => {
       failedStages: [{ stage: 'OCR', errorMessage: 'OCR failed' }],
       fallbackStages: ['PERSPECTIVE_CORRECTION'],
       finalImageRole: 'CROPPED',
+      originalImageUrl: 'original.jpg',
+      croppedImageUrl: 'cropped.jpg',
+      enhancedImageUrl: null,
+      processedImageUrl: 'cropped.jpg',
       searchableReady: false,
       errorMessage: 'OCR failed',
       updatedAt: '2026-06-25T10:00:02.000Z',

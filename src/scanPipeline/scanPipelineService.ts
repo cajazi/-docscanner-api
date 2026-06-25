@@ -224,17 +224,93 @@ export function toProcessPageResponse(result: ScanPipelineResult) {
 }
 
 export function toProcessJobStatusResponse(result: ScanPipelineResult) {
+  const imageUrls = resolveProcessImageUrls(result);
+
   return {
     id: result.pipelineId,
     status: result.failedStages.length > 0 ? 'FAILED' : 'COMPLETED',
     completedStages: result.completedStages,
     failedStages: result.failedStages,
     fallbackStages: result.fallbackStages,
-    finalImageRole: result.finalImageRole,
+    finalImageRole: imageUrls.processedImageRole,
+    originalImageUrl: imageUrls.originalImageUrl,
+    croppedImageUrl: imageUrls.croppedImageUrl,
+    enhancedImageUrl: imageUrls.enhancedImageUrl,
+    processedImageUrl: imageUrls.processedImageUrl,
     searchableReady: result.searchableReady,
     errorMessage: result.failedStages[0]?.errorMessage ?? null,
     updatedAt: resolvePipelineUpdatedAt(result),
   };
+}
+
+function resolveProcessImageUrls(result: ScanPipelineResult) {
+  const enhancementSourceRole = readMetadataSourceRole(result.enhancementJob?.metadata);
+  const originalImageUrl =
+    result.edgeDetectionJob?.sourceImageUrl ??
+    (enhancementSourceRole === ScanSourceRole.ORIGINAL ? result.enhancementJob?.originalImageUrl : null) ??
+    (result.ocrJob?.sourceImageRole === ScanSourceRole.ORIGINAL ? result.ocrJob.sourceImageUrl : null) ??
+    null;
+  const croppedImageUrl =
+    result.edgeDetectionJob?.croppedImageUrl ??
+    (enhancementSourceRole === ScanSourceRole.CROPPED ? result.enhancementJob?.originalImageUrl : null) ??
+    (result.ocrJob?.sourceImageRole === ScanSourceRole.CROPPED ? result.ocrJob.sourceImageUrl : null) ??
+    null;
+  const enhancedImageUrl =
+    result.enhancementJob?.enhancedImageUrl ??
+    (result.ocrJob?.sourceImageRole === ScanSourceRole.ENHANCED ? result.ocrJob.sourceImageUrl : null) ??
+    null;
+  const processedImageUrl = enhancedImageUrl ?? croppedImageUrl ?? originalImageUrl ?? null;
+
+  return {
+    originalImageUrl,
+    croppedImageUrl,
+    enhancedImageUrl,
+    processedImageUrl,
+    processedImageRole: resolveProcessedImageRole({
+      originalImageUrl,
+      croppedImageUrl,
+      enhancedImageUrl,
+      processedImageUrl,
+    }),
+  };
+}
+
+function resolveProcessedImageRole(input: {
+  originalImageUrl: string | null;
+  croppedImageUrl: string | null;
+  enhancedImageUrl: string | null;
+  processedImageUrl: string | null;
+}) {
+  if (!input.processedImageUrl) {
+    return null;
+  }
+
+  if (input.processedImageUrl === input.enhancedImageUrl) {
+    return ScanSourceRole.ENHANCED;
+  }
+
+  if (input.processedImageUrl === input.croppedImageUrl) {
+    return ScanSourceRole.CROPPED;
+  }
+
+  if (input.processedImageUrl === input.originalImageUrl) {
+    return ScanSourceRole.ORIGINAL;
+  }
+
+  return null;
+}
+
+function readMetadataSourceRole(metadata: unknown) {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    return null;
+  }
+
+  const sourceRole = (metadata as Record<string, unknown>).sourceRole;
+  return sourceRole === ScanSourceRole.ORIGINAL ||
+    sourceRole === ScanSourceRole.CROPPED ||
+    sourceRole === ScanSourceRole.ENHANCED
+    ? sourceRole
+    : null;
 }
 
 function resolvePipelineUpdatedAt(result: ScanPipelineResult) {

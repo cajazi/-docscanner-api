@@ -26,7 +26,7 @@ export class LocalFileStorage implements ObjectStorage {
   }
 
   async write(key: string, data: Buffer, contentType: string): Promise<StoredObject> {
-    if (!['image/jpeg', 'application/pdf'].includes(contentType)) {
+    if (!['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(contentType)) {
       throw new Error(`Unsupported stored object content type: ${contentType}`);
     }
 

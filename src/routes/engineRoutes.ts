@@ -7,6 +7,11 @@ import { PdfExportPipelineError, type PdfExportService } from '../pdfExport/pdfE
 import { ScanPipelineError, toProcessPageResponse, type ScanPipelineService } from '../scanPipeline/scanPipelineService';
 import { getOpenCvCapabilities } from '../opencv';
 import { env } from '../config/env';
+import {
+  isSupportedImageMimeType,
+  UploadContractError,
+  type UploadContractService,
+} from '../uploadContract/uploadContractService';
 
 type EngineRoutesOptions = {
   ocrPipelineService: OCRPipelineService;
@@ -14,7 +19,21 @@ type EngineRoutesOptions = {
   edgeDetectionService: EdgeDetectionService;
   pdfExportService: PdfExportService;
   scanPipelineService: ScanPipelineService;
+  uploadContractService: UploadContractService;
 };
+
+const createDocumentSchema = z
+  .object({
+    title: z.string().trim().min(1).max(200).optional(),
+  })
+  .strict();
+
+const createPageSchema = z
+  .object({
+    storagePath: z.string().trim().min(1).max(4096),
+    type: z.enum(['ORIGINAL']),
+  })
+  .strict();
 
 const startOCRJobSchema = z.object({
   language: z.string().trim().min(2).max(32).default('eng'),
@@ -52,6 +71,52 @@ const createPdfExportJobSchema = z.object({
 });
 
 export async function engineRoutes(app: FastifyInstance, options: EngineRoutesOptions) {
+  app.post('/engine/documents', async (request, reply) => {
+    const body = createDocumentSchema.parse(request.body ?? {});
+    const document = await options.uploadContractService.createDocument(body);
+
+    return reply.code(201).send(document);
+  });
+
+  app.post('/engine/uploads/images', async (request, reply) => {
+    const file = await request.file();
+    if (!file) {
+      throw new UploadContractError('UPLOAD_FILE_REQUIRED', 'Multipart field "file" is required', 400);
+    }
+
+    if (file.fieldname !== 'file') {
+      throw new UploadContractError('UPLOAD_FILE_REQUIRED', 'Multipart field "file" is required', 400);
+    }
+
+    if (!isSupportedImageMimeType(file.mimetype)) {
+      throw new UploadContractError('UNSUPPORTED_IMAGE_TYPE', 'Only JPEG, PNG, and WebP images are supported', 415);
+    }
+
+    const upload = await options.uploadContractService.storeImage({
+      data: await file.toBuffer(),
+      mimeType: file.mimetype,
+      originalFilename: file.filename,
+    });
+
+    return reply.code(201).send(upload);
+  });
+
+  app.post('/engine/documents/:documentId/pages', async (request, reply) => {
+    const params = z
+      .object({
+        documentId: z.string().min(1),
+      })
+      .parse(request.params);
+    const body = createPageSchema.parse(request.body ?? {});
+    const page = await options.uploadContractService.createPage({
+      documentId: params.documentId,
+      storagePath: body.storagePath,
+      type: body.type,
+    });
+
+    return reply.code(201).send(page);
+  });
+
   app.get('/engine/capabilities', async () => {
     const cvPipeline = getOpenCvCapabilities(env.CV_PROVIDER);
 
@@ -259,7 +324,8 @@ export async function engineRoutes(app: FastifyInstance, options: EngineRoutesOp
       error instanceof EnhancementPipelineError ||
       error instanceof EdgeDetectionPipelineError ||
       error instanceof PdfExportPipelineError ||
-      error instanceof ScanPipelineError
+      error instanceof ScanPipelineError ||
+      error instanceof UploadContractError
     ) {
       return reply.code(error.statusCode).send({
         error: {

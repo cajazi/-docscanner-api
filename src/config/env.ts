@@ -34,6 +34,8 @@ const envSchema = z.object({
   PDF_EXPORT_BATCH_SIZE: z.coerce.number().int().positive().max(10).default(3),
   PDF_EXPORT_STORAGE_ROOT: z.string().default('C:\\tmp\\docscanner-api\\pdf-exports'),
   PDF_EXPORT_STORAGE_PUBLIC_BASE_URL: z.string().optional(),
+  UPLOAD_STORAGE_ROOT: z.string().default('C:\\tmp\\docscanner-api\\uploads'),
+  UPLOAD_STORAGE_PUBLIC_BASE_URL: z.string().optional(),
 });
 
 export const env = envSchema.parse(process.env);

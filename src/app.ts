@@ -1,5 +1,6 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import multipart from '@fastify/multipart';
 import { env } from './config/env';
 import { engineRoutes } from './routes/engineRoutes';
 import { createDefaultOCRPipelineService } from './ocr';
@@ -13,6 +14,8 @@ import type { PdfExportService } from './pdfExport/pdfExportService';
 import { createDefaultSearchablePdfService } from './searchablePdf';
 import type { SearchablePdfService } from './searchablePdf/searchablePdfService';
 import { ScanPipelineService } from './scanPipeline/scanPipelineService';
+import { createDefaultUploadContractService } from './uploadContract';
+import type { UploadContractService } from './uploadContract/uploadContractService';
 
 type BuildAppOptions = {
   ocrPipelineService?: OCRPipelineService;
@@ -21,6 +24,7 @@ type BuildAppOptions = {
   pdfExportService?: PdfExportService;
   searchablePdfService?: SearchablePdfService;
   scanPipelineService?: ScanPipelineService;
+  uploadContractService?: UploadContractService;
 };
 
 export async function buildApp(options: BuildAppOptions = {}) {
@@ -65,6 +69,24 @@ export async function buildApp(options: BuildAppOptions = {}) {
         }),
         close: async () => undefined,
       };
+  const uploadContract = options.uploadContractService
+    ? { service: options.uploadContractService, close: async () => undefined }
+    : env.NODE_ENV === 'test'
+      ? {
+          service: {
+            async createDocument() {
+              throw new Error('Upload contract service test double was not configured');
+            },
+            async storeImage() {
+              throw new Error('Upload contract service test double was not configured');
+            },
+            async createPage() {
+              throw new Error('Upload contract service test double was not configured');
+            },
+          } as unknown as UploadContractService,
+          close: async () => undefined,
+        }
+      : createDefaultUploadContractService();
 
   enhancementPipeline.processor?.start();
   edgeDetectionPipeline.processor?.start();
@@ -72,6 +94,12 @@ export async function buildApp(options: BuildAppOptions = {}) {
 
   await app.register(cors, {
     origin: true,
+  });
+  await app.register(multipart, {
+    limits: {
+      files: 1,
+      fileSize: 10 * 1024 * 1024,
+    },
   });
 
   app.get('/health', async () => ({
@@ -86,6 +114,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
     await pdfExportPipeline.close();
     await searchablePdfPipeline.close();
     await scanPipeline.close();
+    await uploadContract.close();
   });
 
   await app.register(engineRoutes, {
@@ -94,6 +123,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
     edgeDetectionService: edgeDetectionPipeline.service,
     pdfExportService: pdfExportPipeline.service,
     scanPipelineService: scanPipeline.service,
+    uploadContractService: uploadContract.service,
   });
 
   return app;

@@ -11,6 +11,7 @@ import { PdfExportPipelineError, PdfExportService } from '../pdfExport/pdfExport
 import type { PdfExportProvider, PdfExportRepository } from '../pdfExport/types';
 import { ScanPipelineService } from '../scanPipeline/scanPipelineService';
 import type { SearchablePdfService } from '../searchablePdf/searchablePdfService';
+import { UploadContractError, type UploadContractService } from '../uploadContract/uploadContractService';
 
 function createOCRService(overrides: Partial<OCRPipelineService> = {}) {
   const repository = {} as OCRPipelineRepository;
@@ -52,7 +53,265 @@ function createScanPipelineService(overrides: Partial<ScanPipelineService> = {})
   );
 }
 
+function createUploadContractService(overrides: Partial<UploadContractService> = {}) {
+  return Object.assign(
+    {
+      async createDocument() {
+        throw new Error('createDocument was not mocked');
+      },
+      async storeImage() {
+        throw new Error('storeImage was not mocked');
+      },
+      async createPage() {
+        throw new Error('createPage was not mocked');
+      },
+    } as unknown as UploadContractService,
+    overrides,
+  );
+}
+
+function createMultipartPayload(input: { fieldName?: string; filename: string; mimeType: string; content: Buffer }) {
+  const boundary = `----docscanner-${Math.random().toString(16).slice(2)}`;
+  const head = Buffer.from(
+    [
+      `--${boundary}`,
+      `Content-Disposition: form-data; name="${input.fieldName ?? 'file'}"; filename="${input.filename}"`,
+      `Content-Type: ${input.mimeType}`,
+      '',
+      '',
+    ].join('\r\n'),
+  );
+  const tail = Buffer.from(`\r\n--${boundary}--\r\n`);
+
+  return {
+    payload: Buffer.concat([head, input.content, tail]),
+    headers: {
+      'content-type': `multipart/form-data; boundary=${boundary}`,
+    },
+  };
+}
+
 describe('engineRoutes', () => {
+  it('creates a document through the upload contract service', async () => {
+    const app = await buildApp({
+      ocrPipelineService: createOCRService(),
+      enhancementService: createEnhancementService(),
+      edgeDetectionService: createEdgeDetectionService(),
+      pdfExportService: createPdfExportService(),
+      scanPipelineService: createScanPipelineService(),
+      uploadContractService: createUploadContractService({
+        async createDocument(input) {
+          return {
+            id: 'doc_1',
+            title: input.title ?? 'Untitled document',
+            createdAt: new Date('2026-06-25T10:00:00.000Z'),
+          };
+        },
+      }),
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/engine/documents',
+      payload: {
+        title: 'Receipt',
+      },
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toEqual({
+      id: 'doc_1',
+      title: 'Receipt',
+      createdAt: '2026-06-25T10:00:00.000Z',
+    });
+  });
+
+  it('rejects non-image uploads', async () => {
+    const app = await buildApp({
+      ocrPipelineService: createOCRService(),
+      enhancementService: createEnhancementService(),
+      edgeDetectionService: createEdgeDetectionService(),
+      pdfExportService: createPdfExportService(),
+      scanPipelineService: createScanPipelineService(),
+      uploadContractService: createUploadContractService(),
+    });
+    const multipart = createMultipartPayload({
+      filename: 'notes.txt',
+      mimeType: 'text/plain',
+      content: Buffer.from('not an image'),
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/engine/uploads/images',
+      ...multipart,
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(415);
+    expect(response.json()).toEqual({
+      error: {
+        code: 'UNSUPPORTED_IMAGE_TYPE',
+        message: 'Only JPEG, PNG, and WebP images are supported',
+      },
+    });
+  });
+
+  it.each([
+    ['image/jpeg', 'scan.jpg'],
+    ['image/png', 'scan.png'],
+    ['image/webp', 'scan.webp'],
+  ])('accepts %s image uploads', async (mimeType, filename) => {
+    const app = await buildApp({
+      ocrPipelineService: createOCRService(),
+      enhancementService: createEnhancementService(),
+      edgeDetectionService: createEdgeDetectionService(),
+      pdfExportService: createPdfExportService(),
+      scanPipelineService: createScanPipelineService(),
+      uploadContractService: createUploadContractService({
+        async storeImage(input) {
+          return {
+            storagePath: `C:\\tmp\\docscanner-api\\uploads\\${input.originalFilename}`,
+            mimeType: input.mimeType,
+            sizeBytes: input.data.length,
+            originalFilename: input.originalFilename,
+          };
+        },
+      }),
+    });
+    const multipart = createMultipartPayload({
+      filename,
+      mimeType,
+      content: Buffer.from([1, 2, 3]),
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/engine/uploads/images',
+      ...multipart,
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toEqual({
+      storagePath: `C:\\tmp\\docscanner-api\\uploads\\${filename}`,
+      mimeType,
+      sizeBytes: 3,
+      originalFilename: filename,
+    });
+  });
+
+  it('creates a page linked to an uploaded original image', async () => {
+    const app = await buildApp({
+      ocrPipelineService: createOCRService(),
+      enhancementService: createEnhancementService(),
+      edgeDetectionService: createEdgeDetectionService(),
+      pdfExportService: createPdfExportService(),
+      scanPipelineService: createScanPipelineService(),
+      uploadContractService: createUploadContractService({
+        async createPage(input) {
+          return {
+            id: 'page_1',
+            documentId: input.documentId,
+            pageNumber: 1,
+            originalImageUrl: input.storagePath,
+            croppedImageUrl: null,
+            enhancedImageUrl: null,
+          };
+        },
+      }),
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/engine/documents/doc_1/pages',
+      payload: {
+        storagePath: 'C:\\tmp\\docscanner-api\\uploads\\scan.jpg',
+        type: 'ORIGINAL',
+      },
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toEqual({
+      id: 'page_1',
+      documentId: 'doc_1',
+      pageNumber: 1,
+      originalImageUrl: 'C:\\tmp\\docscanner-api\\uploads\\scan.jpg',
+      croppedImageUrl: null,
+      enhancedImageUrl: null,
+    });
+  });
+
+  it('returns 404 when creating a page for a missing document', async () => {
+    const app = await buildApp({
+      ocrPipelineService: createOCRService(),
+      enhancementService: createEnhancementService(),
+      edgeDetectionService: createEdgeDetectionService(),
+      pdfExportService: createPdfExportService(),
+      scanPipelineService: createScanPipelineService(),
+      uploadContractService: createUploadContractService({
+        async createPage() {
+          throw new UploadContractError('DOCUMENT_NOT_FOUND', 'Document was not found', 404);
+        },
+      }),
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/engine/documents/missing/pages',
+      payload: {
+        storagePath: 'C:\\tmp\\docscanner-api\\uploads\\scan.jpg',
+        type: 'ORIGINAL',
+      },
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({
+      error: {
+        code: 'DOCUMENT_NOT_FOUND',
+        message: 'Document was not found',
+      },
+    });
+  });
+
+  it('returns validation errors for invalid upload contract requests', async () => {
+    const app = await buildApp({
+      ocrPipelineService: createOCRService(),
+      enhancementService: createEnhancementService(),
+      edgeDetectionService: createEdgeDetectionService(),
+      pdfExportService: createPdfExportService(),
+      scanPipelineService: createScanPipelineService(),
+      uploadContractService: createUploadContractService(),
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/engine/documents/doc_1/pages',
+      payload: {
+        storagePath: '',
+        type: 'CROPPED',
+      },
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: 'Request validation failed',
+      },
+    });
+  });
+
   it('reports OCR, enhancement, edge detection, and PDF export pipeline capabilities', async () => {
     const app = await buildApp({
       ocrPipelineService: createOCRService(),

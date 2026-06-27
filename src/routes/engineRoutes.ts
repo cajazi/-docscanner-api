@@ -4,6 +4,7 @@ import { OCRPipelineError, type OCRPipelineService } from '../ocr/ocrPipelineSer
 import { EnhancementPipelineError, type EnhancementService } from '../enhancement/enhancementService';
 import { EdgeDetectionPipelineError, type EdgeDetectionService } from '../edgeDetection/edgeDetectionService';
 import { PdfExportPipelineError, type PdfExportService } from '../pdfExport/pdfExportService';
+import { OCRResultError, type OCRResultService } from '../ocrResult/ocrResultService';
 import {
   ScanPipelineError,
   toProcessJobStatusResponse,
@@ -25,6 +26,7 @@ type EngineRoutesOptions = {
   pdfExportService: PdfExportService;
   scanPipelineService: ScanPipelineService;
   uploadContractService: UploadContractService;
+  ocrResultService: OCRResultService;
 };
 
 const createDocumentSchema = z
@@ -211,6 +213,20 @@ export async function engineRoutes(app: FastifyInstance, options: EngineRoutesOp
     return reply.code(201).send({ job });
   });
 
+  app.get('/engine/documents/:documentId/pages/:pageId/ocr', async (request) => {
+    const params = z
+      .object({
+        documentId: z.string().min(1),
+        pageId: z.string().min(1),
+      })
+      .parse(request.params);
+
+    return options.ocrResultService.getPageResult({
+      documentId: params.documentId,
+      pageId: params.pageId,
+    });
+  });
+
   app.get('/engine/ocr-jobs/:jobId', async (request) => {
     const params = z
       .object({
@@ -341,7 +357,8 @@ export async function engineRoutes(app: FastifyInstance, options: EngineRoutesOp
       error instanceof EdgeDetectionPipelineError ||
       error instanceof PdfExportPipelineError ||
       error instanceof ScanPipelineError ||
-      error instanceof UploadContractError
+      error instanceof UploadContractError ||
+      error instanceof OCRResultError
     ) {
       return reply.code(error.statusCode).send({
         error: {

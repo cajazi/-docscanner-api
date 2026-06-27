@@ -16,6 +16,8 @@ import type { SearchablePdfService } from './searchablePdf/searchablePdfService'
 import { ScanPipelineService } from './scanPipeline/scanPipelineService';
 import { createDefaultUploadContractService } from './uploadContract';
 import type { UploadContractService } from './uploadContract/uploadContractService';
+import { createDefaultOCRResultService } from './ocrResult';
+import type { OCRResultService } from './ocrResult/ocrResultService';
 
 type BuildAppOptions = {
   ocrPipelineService?: OCRPipelineService;
@@ -25,6 +27,7 @@ type BuildAppOptions = {
   searchablePdfService?: SearchablePdfService;
   scanPipelineService?: ScanPipelineService;
   uploadContractService?: UploadContractService;
+  ocrResultService?: OCRResultService;
 };
 
 export async function buildApp(options: BuildAppOptions = {}) {
@@ -88,6 +91,19 @@ export async function buildApp(options: BuildAppOptions = {}) {
         }
       : createDefaultUploadContractService();
 
+  const ocrResult = options.ocrResultService
+    ? { service: options.ocrResultService, close: async () => undefined }
+    : env.NODE_ENV === 'test'
+      ? {
+          service: {
+            async getPageResult() {
+              throw new Error('OCR result service test double was not configured');
+            },
+          } as unknown as OCRResultService,
+          close: async () => undefined,
+        }
+      : createDefaultOCRResultService();
+
   enhancementPipeline.processor?.start();
   edgeDetectionPipeline.processor?.start();
   pdfExportPipeline.processor?.start();
@@ -115,6 +131,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
     await searchablePdfPipeline.close();
     await scanPipeline.close();
     await uploadContract.close();
+    await ocrResult.close();
   });
 
   await app.register(engineRoutes, {
@@ -124,6 +141,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
     pdfExportService: pdfExportPipeline.service,
     scanPipelineService: scanPipeline.service,
     uploadContractService: uploadContract.service,
+    ocrResultService: ocrResult.service,
   });
 
   return app;

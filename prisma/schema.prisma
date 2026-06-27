@@ -32,6 +32,27 @@ enum SubscriptionTier {
   BUSINESS
 }
 
+enum EnhancementStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum EdgeDetectionStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum PdfExportStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
 enum OCRProvider {
   TESSERACT_CLI
 }
@@ -80,9 +101,11 @@ model Document {
   originalUrl String?
   pdfUrl      String?
   searchableText String?
+  searchablePdfMetadata Json?
 
   pages DocumentPage[]
   ocrJobs OCRJob[]
+  pdfExportJobs PdfExportJob[]
   user  User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
@@ -92,11 +115,31 @@ model Document {
   @@index([status])
 }
 
+model PdfExportJob {
+  id           String          @id @default(cuid())
+  documentId   String
+  status       PdfExportStatus @default(PENDING)
+  provider     String          @default("pdf-lib")
+  outputPdfUrl String?
+  pageCount    Int?
+  errorMessage String?
+  metadata     Json?
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([documentId])
+  @@index([status])
+}
+
 model DocumentPage {
   id             String           @id @default(cuid())
   documentId     String
   pageNumber     Int
   originalImageUrl String?
+  croppedImageUrl String?
   enhancedImageUrl String?
   ocrText        String?
   ocrLanguage    String?
@@ -110,12 +153,54 @@ model DocumentPage {
 
   document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
   ocrJobs OCRJob[]
+  enhancementJobs EnhancementJob[]
+  edgeDetectionJobs EdgeDetectionJob[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([documentId])
   @@unique([documentId, pageNumber])
+}
+
+model EdgeDetectionJob {
+  id              String              @id @default(cuid())
+  pageId          String
+  status          EdgeDetectionStatus @default(PENDING)
+  provider        String              @default("heuristic")
+  sourceImageUrl  String
+  croppedImageUrl String?
+  corners         Json?
+  confidence      Float?
+  errorMessage    String?
+  metadata        Json?
+
+  page DocumentPage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([pageId])
+  @@index([status])
+}
+
+model EnhancementJob {
+  id               String            @id @default(cuid())
+  pageId           String
+  status           EnhancementStatus @default(PENDING)
+  provider         String
+  originalImageUrl String
+  enhancedImageUrl String?
+  errorMessage     String?
+  metadata         Json?
+
+  page DocumentPage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([pageId])
+  @@index([status])
 }
 
 model OCRJob {

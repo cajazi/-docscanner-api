@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { buildApp } from '../app';
 import { OCRPipelineError, OCRPipelineService } from '../ocr/ocrPipelineService';
 import type { OCRPipelineRepository, OCRProvider } from '../ocr/types';
@@ -13,6 +13,14 @@ import { ScanPipelineError, ScanPipelineService } from '../scanPipeline/scanPipe
 import type { ScanPipelineResult } from '../scanPipeline/scanPipelineTypes';
 import type { SearchablePdfService } from '../searchablePdf/searchablePdfService';
 import { UploadContractError, type UploadContractService } from '../uploadContract/uploadContractService';
+import { OCRResultService } from '../ocrResult/ocrResultService';
+import type { OCRResultRepository } from '../ocrResult/types';
+
+function createOCRResultService(overrides: Partial<OCRResultService> = {}) {
+  const repository = {} as OCRResultRepository;
+
+  return Object.assign(new OCRResultService(repository), overrides);
+}
 
 function createOCRService(overrides: Partial<OCRPipelineService> = {}) {
   const repository = {} as OCRPipelineRepository;
@@ -528,6 +536,191 @@ describe('engineRoutes', () => {
         message: 'OCR job was not found',
       },
     });
+  });
+
+  it('returns the completed OCR result for a page', async () => {
+    const app = await buildApp({
+      ocrPipelineService: createOCRService(),
+      enhancementService: createEnhancementService(),
+      edgeDetectionService: createEdgeDetectionService(),
+      pdfExportService: createPdfExportService(),
+      ocrResultService: createOCRResultService({
+        async getPageResult(input) {
+          return {
+            documentId: input.documentId,
+            pageId: input.pageId,
+            status: 'COMPLETED',
+            ocrText: 'Recognized invoice text',
+            extractedText: 'Recognized invoice text',
+            searchableText: 'Recognized invoice text',
+            textLayer: { schemaVersion: 1, source: 'ocr', lines: [] },
+            updatedAt: new Date('2026-06-26T10:00:00.000Z'),
+          };
+        },
+      }),
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/engine/documents/doc_1/pages/page_1/ocr',
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      documentId: 'doc_1',
+      pageId: 'page_1',
+      status: 'COMPLETED',
+      ocrText: 'Recognized invoice text',
+      extractedText: 'Recognized invoice text',
+      searchableText: 'Recognized invoice text',
+      textLayer: { schemaVersion: 1, source: 'ocr', lines: [] },
+      updatedAt: '2026-06-26T10:00:00.000Z',
+    });
+  });
+
+  it('returns EMPTY status when the page exists but has no OCR text', async () => {
+    const findPageResult = vi.fn(async () => ({
+      documentId: 'doc_1',
+      pageId: 'page_1',
+      ocrText: null,
+      textLayer: null,
+      searchableText: null,
+      updatedAt: new Date('2026-06-26T10:00:00.000Z'),
+    }));
+    const app = await buildApp({
+      ocrPipelineService: createOCRService(),
+      enhancementService: createEnhancementService(),
+      edgeDetectionService: createEdgeDetectionService(),
+      pdfExportService: createPdfExportService(),
+      ocrResultService: createOCRResultService({
+        repository: { findPageResult } as unknown as OCRResultRepository,
+      } as Partial<OCRResultService>),
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/engine/documents/doc_1/pages/page_1/ocr',
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      documentId: 'doc_1',
+      pageId: 'page_1',
+      status: 'EMPTY',
+      ocrText: '',
+      extractedText: '',
+      searchableText: '',
+      textLayer: {},
+      updatedAt: '2026-06-26T10:00:00.000Z',
+    });
+  });
+
+  it('includes the document searchableText aggregation when available', async () => {
+    const app = await buildApp({
+      ocrPipelineService: createOCRService(),
+      enhancementService: createEnhancementService(),
+      edgeDetectionService: createEdgeDetectionService(),
+      pdfExportService: createPdfExportService(),
+      ocrResultService: createOCRResultService({
+        repository: {
+          async findPageResult(documentId: string, pageId: string) {
+            return {
+              documentId,
+              pageId,
+              ocrText: 'Page one text',
+              textLayer: null,
+              searchableText: 'Page one text\n\nPage two text',
+              updatedAt: new Date('2026-06-26T10:00:00.000Z'),
+            };
+          },
+        } as unknown as OCRResultRepository,
+      } as Partial<OCRResultService>),
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/engine/documents/doc_1/pages/page_1/ocr',
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      status: 'COMPLETED',
+      ocrText: 'Page one text',
+      searchableText: 'Page one text\n\nPage two text',
+    });
+  });
+
+  it('returns 404 when the document page is missing', async () => {
+    const app = await buildApp({
+      ocrPipelineService: createOCRService(),
+      enhancementService: createEnhancementService(),
+      edgeDetectionService: createEdgeDetectionService(),
+      pdfExportService: createPdfExportService(),
+      ocrResultService: createOCRResultService({
+        repository: {
+          async findPageResult() {
+            return null;
+          },
+        } as unknown as OCRResultRepository,
+      } as Partial<OCRResultService>),
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/engine/documents/missing/pages/missing/ocr',
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({
+      error: {
+        code: 'OCR_RESULT_NOT_FOUND',
+        message: 'Document page was not found',
+      },
+    });
+  });
+
+  it('does not rerun the OCR pipeline when reading a persisted result', async () => {
+    const startPageOCR = vi.fn(async () => {
+      throw new Error('OCR pipeline must not run when reading persisted results');
+    });
+    const app = await buildApp({
+      ocrPipelineService: createOCRService({ startPageOCR }),
+      enhancementService: createEnhancementService(),
+      edgeDetectionService: createEdgeDetectionService(),
+      pdfExportService: createPdfExportService(),
+      ocrResultService: createOCRResultService({
+        async getPageResult(input) {
+          return {
+            documentId: input.documentId,
+            pageId: input.pageId,
+            status: 'COMPLETED',
+            ocrText: 'Persisted text',
+            extractedText: 'Persisted text',
+            searchableText: 'Persisted text',
+            textLayer: {},
+            updatedAt: new Date('2026-06-26T10:00:00.000Z'),
+          };
+        },
+      }),
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/engine/documents/doc_1/pages/page_1/ocr',
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(startPageOCR).not.toHaveBeenCalled();
   });
 
   it('starts page enhancement through the enhancement service', async () => {
